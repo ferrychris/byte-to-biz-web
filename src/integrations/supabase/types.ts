@@ -14,7 +14,233 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      generation_progress: {
+        Row: {
+          error_message: string | null
+          id: string
+          progress_percentage: number | null
+          project_id: string
+          stage: string
+          status: Database["public"]["Enums"]["generation_status"]
+          timestamp: string
+        }
+        Insert: {
+          error_message?: string | null
+          id?: string
+          progress_percentage?: number | null
+          project_id: string
+          stage: string
+          status?: Database["public"]["Enums"]["generation_status"]
+          timestamp?: string
+        }
+        Update: {
+          error_message?: string | null
+          id?: string
+          progress_percentage?: number | null
+          project_id?: string
+          stage?: string
+          status?: Database["public"]["Enums"]["generation_status"]
+          timestamp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generation_progress_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "website_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      website_deployments: {
+        Row: {
+          created_at: string
+          deployed_at: string | null
+          deployment_url: string | null
+          id: string
+          platform: string | null
+          project_id: string
+          status: Database["public"]["Enums"]["deployment_status"]
+        }
+        Insert: {
+          created_at?: string
+          deployed_at?: string | null
+          deployment_url?: string | null
+          id?: string
+          platform?: string | null
+          project_id: string
+          status?: Database["public"]["Enums"]["deployment_status"]
+        }
+        Update: {
+          created_at?: string
+          deployed_at?: string | null
+          deployment_url?: string | null
+          id?: string
+          platform?: string | null
+          project_id?: string
+          status?: Database["public"]["Enums"]["deployment_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "website_deployments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "website_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      website_generated_data: {
+        Row: {
+          assets_urls: Json | null
+          created_at: string
+          css_content: string | null
+          html_content: string | null
+          id: string
+          js_content: string | null
+          metadata: Json | null
+          project_id: string
+          updated_at: string
+        }
+        Insert: {
+          assets_urls?: Json | null
+          created_at?: string
+          css_content?: string | null
+          html_content?: string | null
+          id?: string
+          js_content?: string | null
+          metadata?: Json | null
+          project_id: string
+          updated_at?: string
+        }
+        Update: {
+          assets_urls?: Json | null
+          created_at?: string
+          css_content?: string | null
+          html_content?: string | null
+          id?: string
+          js_content?: string | null
+          metadata?: Json | null
+          project_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "website_generated_data_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "website_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      website_page_drafts: {
+        Row: {
+          content: Json | null
+          created_at: string
+          id: string
+          metadata: Json | null
+          page_type: string
+          project_id: string
+          version: number | null
+        }
+        Insert: {
+          content?: Json | null
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          page_type: string
+          project_id: string
+          version?: number | null
+        }
+        Update: {
+          content?: Json | null
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          page_type?: string
+          project_id?: string
+          version?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "website_page_drafts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "website_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      website_projects: {
+        Row: {
+          business_name: string
+          business_type: string
+          created_at: string
+          description: string
+          id: string
+          location: string | null
+          status: Database["public"]["Enums"]["generation_status"]
+          target_audience: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          business_name: string
+          business_type: string
+          created_at?: string
+          description: string
+          id?: string
+          location?: string | null
+          status?: Database["public"]["Enums"]["generation_status"]
+          target_audience?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          business_name?: string
+          business_type?: string
+          created_at?: string
+          description?: string
+          id?: string
+          location?: string | null
+          status?: Database["public"]["Enums"]["generation_status"]
+          target_audience?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +249,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      deployment_status: "pending" | "deploying" | "deployed" | "failed"
+      generation_status: "pending" | "in_progress" | "completed" | "failed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +377,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      deployment_status: ["pending", "deploying", "deployed", "failed"],
+      generation_status: ["pending", "in_progress", "completed", "failed"],
+    },
   },
 } as const
