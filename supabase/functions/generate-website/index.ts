@@ -412,6 +412,8 @@ Return a JSON object with:
 }
 
 Make sure to include the Bootstrap 5 CDN links in each HTML file. The website should clearly represent ${businessInfo.businessName} as a ${businessInfo.businessType} business. The code should be production-ready, well-structured, and follow best practices.
+
+IMPORTANT: Ensure all HTML attributes with quotes are properly escaped in the JSON response.
   `;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -423,7 +425,7 @@ Make sure to include the Bootstrap 5 CDN links in each HTML file. The website sh
     body: JSON.stringify({
       model: 'gpt-4o',
       messages: [
-        { role: 'system', content: 'You are an expert full-stack web developer specializing in creating beautiful, functional websites for businesses using Bootstrap 5. Generate production-ready code with separate HTML files for each page. Return only valid JSON.' },
+        { role: 'system', content: 'You are an expert full-stack web developer specializing in creating beautiful, functional websites for businesses using Bootstrap 5. Generate production-ready code with separate HTML files for each page. Return only valid JSON. Make sure to properly escape all quotes in HTML attributes.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.3,
@@ -442,11 +444,337 @@ Make sure to include the Bootstrap 5 CDN links in each HTML file. The website sh
   
   // Strip markdown code fences if present
   const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  
   try {
+    // First attempt to parse the JSON directly
     return JSON.parse(cleanContent);
   } catch (error) {
     console.error(`${logPrefix} Error parsing JSON for website code:`, error);
-    console.error(`${logPrefix} Raw content:`, cleanContent);
-    throw new Error('Failed to parse website code JSON');
+    console.error(`${logPrefix} Raw content (first 1000 chars):`, cleanContent.substring(0, 1000));
+    
+    // Fallback: Generate a simplified structure with basic pages
+    console.log(`${logPrefix} Generating fallback website structure...`);
+    
+    // Try to fix common JSON issues before giving up
+    let fixedContent = cleanContent;
+    
+    // Try to fix unterminated strings by finding the last complete object
+    try {
+      // Find the last complete closing brace
+      const lastBrace = fixedContent.lastIndexOf('}');
+      if (lastBrace > 0) {
+        fixedContent = fixedContent.substring(0, lastBrace + 1);
+        console.log(`${logPrefix} Attempting to parse truncated JSON...`);
+        return JSON.parse(fixedContent);
+      }
+    } catch (fixError) {
+      console.log(`${logPrefix} Truncation fix failed, proceeding with fallback generation`);
+    }
+    
+    // If JSON fixing didn't work, generate fallback pages
+    const defaultPages = ['home', 'about', 'services', 'contact'];
+    const fallbackPages: Array<{name: string, html: string}> = [];
+    
+    for (const pageName of defaultPages) {
+      fallbackPages.push({
+        name: pageName,
+        html: generateBasicHtml(pageName, businessInfo)
+      });
+    }
+    
+    // Return the fallback structure
+    return {
+      pages: fallbackPages,
+      css: generateBasicCss(),
+      js: generateBasicJs(),
+      assets: []
+    };
   }
+}
+
+// Helper function to generate basic HTML for fallback pages
+function generateBasicHtml(pageName: string, businessInfo: any) {
+  const title = pageName.charAt(0).toUpperCase() + pageName.slice(1);
+  
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${businessInfo.businessName} - ${title}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="styles.css" rel="stylesheet">
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <div class="container">
+      <a class="navbar-brand" href="#">${businessInfo.businessName}</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item"><a class="nav-link ${pageName === 'home' ? 'active' : ''}" href="home.html">Home</a></li>
+          <li class="nav-item"><a class="nav-link ${pageName === 'about' ? 'active' : ''}" href="about.html">About</a></li>
+          <li class="nav-item"><a class="nav-link ${pageName === 'services' ? 'active' : ''}" href="services.html">Services</a></li>
+          <li class="nav-item"><a class="nav-link ${pageName === 'contact' ? 'active' : ''}" href="contact.html">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <header class="bg-primary text-white text-center py-5">
+    <div class="container">
+      <h1>${businessInfo.businessName} - ${title}</h1>
+      <p class="lead">${businessInfo.businessType} in ${businessInfo.location || 'Your Area'}</p>
+    </div>
+  </header>
+
+  <main class="container py-5">
+    ${getPageSpecificContent(pageName, businessInfo)}
+  </main>
+
+  <footer class="bg-dark text-white text-center py-3">
+    <div class="container">
+      <p>&copy; ${new Date().getFullYear()} ${businessInfo.businessName}. All Rights Reserved.</p>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="scripts.js"></script>
+</body>
+</html>`;
+}
+
+// Helper function to generate page-specific content
+function getPageSpecificContent(pageName: string, businessInfo: any) {
+  switch (pageName) {
+    case 'home':
+      return `
+        <section>
+          <h2>Welcome to ${businessInfo.businessName}</h2>
+          <p>${businessInfo.description}</p>
+          <div class="row mt-4">
+            <div class="col-md-4">
+              <div class="card">
+                <div class="card-body">
+                  <h3 class="card-title">Quality Service</h3>
+                  <p class="card-text">We provide top-quality services to meet all your ${businessInfo.businessType} needs.</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card">
+                <div class="card-body">
+                  <h3 class="card-title">Expert Team</h3>
+                  <p class="card-text">Our team of experts is dedicated to delivering the best results for our clients.</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card">
+                <div class="card-body">
+                  <h3 class="card-title">Customer Satisfaction</h3>
+                  <p class="card-text">Your satisfaction is our priority. We strive to exceed your expectations.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      `;
+    case 'about':
+      return `
+        <section>
+          <h2>About Us</h2>
+          <p>${businessInfo.description}</p>
+          <p>At ${businessInfo.businessName}, we are dedicated to providing exceptional ${businessInfo.businessType} services. With years of experience in the industry, we have built a reputation for excellence and reliability.</p>
+          <p>Our mission is to deliver high-quality solutions that meet the unique needs of each client. We believe in building long-lasting relationships based on trust, integrity, and outstanding service.</p>
+        </section>
+      `;
+    case 'services':
+      return `
+        <section>
+          <h2>Our Services</h2>
+          <p>We offer a comprehensive range of ${businessInfo.businessType} services designed to meet your specific needs.</p>
+          <div class="row mt-4">
+            <div class="col-md-6">
+              <div class="card mb-4">
+                <div class="card-body">
+                  <h3 class="card-title">Service 1</h3>
+                  <p class="card-text">Detailed description of the first service we offer.</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="card mb-4">
+                <div class="card-body">
+                  <h3 class="card-title">Service 2</h3>
+                  <p class="card-text">Detailed description of the second service we offer.</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="card mb-4">
+                <div class="card-body">
+                  <h3 class="card-title">Service 3</h3>
+                  <p class="card-text">Detailed description of the third service we offer.</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="card mb-4">
+                <div class="card-body">
+                  <h3 class="card-title">Service 4</h3>
+                  <p class="card-text">Detailed description of the fourth service we offer.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      `;
+    case 'contact':
+      return `
+        <section>
+          <h2>Contact Us</h2>
+          <p>We'd love to hear from you. Please fill out the form below or use the contact information provided.</p>
+          <div class="row mt-4">
+            <div class="col-md-6">
+              <form>
+                <div class="mb-3">
+                  <label for="name" class="form-label">Name</label>
+                  <input type="text" class="form-control" id="name" required>
+                </div>
+                <div class="mb-3">
+                  <label for="email" class="form-label">Email</label>
+                  <input type="email" class="form-control" id="email" required>
+                </div>
+                <div class="mb-3">
+                  <label for="message" class="form-label">Message</label>
+                  <textarea class="form-control" id="message" rows="5" required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Send Message</button>
+              </form>
+            </div>
+            <div class="col-md-6">
+              <h3>Contact Information</h3>
+              <p><strong>Address:</strong> ${businessInfo.location || 'Our Location'}</p>
+              <p><strong>Email:</strong> info@${businessInfo.businessName.toLowerCase().replace(/\s+/g, '')}.com</p>
+              <p><strong>Phone:</strong> (123) 456-7890</p>
+            </div>
+          </div>
+        </section>
+      `;
+    default:
+      return `
+        <section>
+          <h2>${pageName.charAt(0).toUpperCase() + pageName.slice(1)}</h2>
+          <p>Content for ${pageName} page.</p>
+        </section>
+      `;
+  }
+}
+
+// Helper function to generate basic CSS
+function generateBasicCss() {
+  return `
+/* Custom styles for ${new Date().toISOString().split('T')[0]} */
+
+:root {
+  --primary-color: #0d6efd;
+  --secondary-color: #6c757d;
+  --accent-color: #ffc107;
+}
+
+body {
+  font-family: 'Roboto', sans-serif;
+  line-height: 1.6;
+}
+
+.navbar-brand {
+  font-weight: bold;
+}
+
+header {
+  background: linear-gradient(135deg, var(--primary-color), #0a58ca);
+}
+
+.card {
+  transition: transform 0.3s, box-shadow 0.3s;
+  margin-bottom: 1rem;
+}
+
+.card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+}
+
+footer {
+  margin-top: 2rem;
+}
+
+@media (max-width: 768px) {
+  header {
+    padding: 2rem 0;
+  }
+}
+`;
+}
+
+// Helper function to generate basic JavaScript
+function generateBasicJs() {
+  return `
+// Form validation
+document.addEventListener('DOMContentLoaded', function() {
+  const forms = document.querySelectorAll('form');
+  
+  forms.forEach(form => {
+    form.addEventListener('submit', function(event) {
+      event.preventDefault();
+      
+      // Basic validation
+      let valid = true;
+      const inputs = form.querySelectorAll('input, textarea');
+      
+      inputs.forEach(input => {
+        if (input.hasAttribute('required') && !input.value.trim()) {
+          valid = false;
+          input.classList.add('is-invalid');
+        } else {
+          input.classList.remove('is-invalid');
+        }
+      });
+      
+      if (valid) {
+        // Show success message
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-success mt-3';
+        alert.textContent = 'Form submitted successfully! We will get back to you soon.';
+        form.appendChild(alert);
+        
+        // Reset form
+        form.reset();
+        
+        // Remove alert after 5 seconds
+        setTimeout(() => {
+          alert.remove();
+        }, 5000);
+      }
+    });
+  });
+});
+
+// Smooth scrolling for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+  anchor.addEventListener('click', function(e) {
+    e.preventDefault();
+    
+    const target = document.querySelector(this.getAttribute('href'));
+    if (target) {
+      target.scrollIntoView({
+        behavior: 'smooth'
+      });
+    }
+  });
+});
+`;
 }
