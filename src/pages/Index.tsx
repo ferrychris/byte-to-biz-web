@@ -9,13 +9,30 @@ import { ProjectsList } from "@/components/ProjectsList";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 
+interface ColorScheme {
+  primary: string;
+  secondary: string;
+  accent: string;
+  background: string;
+  text: string;
+}
+
+interface Typography {
+  headings: string;
+  body: string;
+}
+
 interface BusinessInfo {
   businessName: string;
   businessType: string;
   description: string;
   location: string;
   contactEmail: string;
+  targetAudience: string;
   projectId: string;
+  websiteTemplate: string;
+  colorScheme: ColorScheme;
+  typography: Typography;
 }
 
 interface Project {
@@ -70,8 +87,11 @@ const Index = () => {
           businessName: data.businessName,
           businessType: data.businessType,
           description: data.description,
-          targetAudience: data.contactEmail,
-          location: data.location
+          targetAudience: data.targetAudience,
+          location: data.location,
+          websiteTemplate: data.websiteTemplate,
+          colorScheme: data.colorScheme,
+          typography: data.typography
         }
       });
 

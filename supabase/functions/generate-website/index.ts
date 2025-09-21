@@ -7,13 +7,29 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+interface ColorScheme {
+  primary: string;
+  secondary: string;
+  accent: string;
+  background: string;
+  text: string;
+}
+
+interface Typography {
+  headings: string;
+  body: string;
+}
+
 interface GenerationRequest {
   projectId: string;
   businessName: string;
   businessType: string;
   description: string;
-  targetAudience?: string;
+  targetAudience: string;
   location?: string;
+  websiteTemplate?: string;
+  colorScheme?: ColorScheme;
+  typography?: Typography;
 }
 
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
@@ -41,48 +57,62 @@ serve(async (req) => {
       throw new Error('Invalid authentication');
     }
 
-    const { projectId, businessName, businessType, description, targetAudience, location }: GenerationRequest = await req.json();
+    const { projectId, businessName, businessType, description, targetAudience, location, websiteTemplate, colorScheme, typography }: GenerationRequest = await req.json();
+    
+    const logPrefix = `[generate-website:${projectId}]`;
+    console.log(`${logPrefix} Starting website generation with template: ${websiteTemplate || 'default'}`);
 
-    console.log('Starting website generation for project:', projectId);
+    // Progress tracking already handled with logPrefix
 
     // Update progress: Planning stage
     await updateProgress(supabase, projectId, 'planning', 'in_progress', 10);
 
     // Generate website structure using OpenAI
     const websiteStructure = await generateWebsiteStructure({
+      projectId,
       businessName,
       businessType,
       description,
       targetAudience,
-      location
+      location,
+      websiteTemplate,
+      colorScheme,
+      typography
     });
 
     await updateProgress(supabase, projectId, 'content_generation', 'in_progress', 30);
 
     // Generate individual pages
     const pages = await generateWebsitePages(websiteStructure, {
+      projectId,
       businessName,
       businessType,
       description,
       targetAudience,
-      location
+      location,
+      websiteTemplate,
+      colorScheme,
+      typography
     });
 
     await updateProgress(supabase, projectId, 'code_generation', 'in_progress', 60);
 
     // Generate HTML, CSS, and JS
     const generatedCode = await generateWebsiteCode(pages, websiteStructure, {
+      projectId,
       businessName,
       businessType,
       description,
       targetAudience,
-      location
+      location,
+      websiteTemplate,
+      colorScheme,
+      typography
     });
 
     await updateProgress(supabase, projectId, 'finalization', 'in_progress', 90);
 
     // Save generated data to database
-    const logPrefix = `[generate-website:${projectId}]`;
     const deploymentUrl = `https://${businessName.toLowerCase().replace(/\s+/g, '-')}-${projectId.substring(0, 8)}.netlify.app`;
     
     // Extract the home page HTML for the main content
@@ -115,7 +145,7 @@ serve(async (req) => {
         .insert({
           project_id: projectId,
           deployment_url: deploymentUrl,
-          status: 'completed',
+          status: 'deployed',
           provider: 'netlify'
         });
         
@@ -128,7 +158,7 @@ serve(async (req) => {
             .insert({
               project_id: projectId,
               deployment_url: deploymentUrl,
-              status: 'completed'
+              status: 'deployed'
             });
             
           if (retryError) {
@@ -187,7 +217,19 @@ async function updateProgress(supabase: any, projectId: string, stage: string, s
     });
 }
 
-async function generateWebsiteStructure(businessInfo: any) {
+interface BusinessInfo {
+  projectId: string;
+  businessName: string;
+  businessType: string;
+  description: string;
+  targetAudience: string;
+  location?: string;
+  websiteTemplate?: string;
+  colorScheme?: ColorScheme;
+  typography?: Typography;
+}
+
+async function generateWebsiteStructure(businessInfo: BusinessInfo) {
   const logPrefix = `[generate-website:${businessInfo.projectId}]`;
   console.log(`${logPrefix} Generating website structure using GPT-5...`);
   
@@ -262,7 +304,7 @@ Make sure the pages are relevant to a ${businessInfo.businessType} business and 
   }
 }
 
-async function generateWebsitePages(structure: any, businessInfo: any) {
+async function generateWebsitePages(structure: Record<string, any>, businessInfo: BusinessInfo) {
   const logPrefix = `[generate-website:${businessInfo.projectId}]`;
   console.log(`${logPrefix} Generating website pages content...`);
   console.log(`${logPrefix} Structure received:`, JSON.stringify(structure, null, 2));
@@ -358,7 +400,7 @@ Make sure all content is specifically tailored to ${businessInfo.businessName} a
   return pages;
 }
 
-async function generateWebsiteCode(pages: any[], structure: any, businessInfo: any) {
+async function generateWebsiteCode(pages: Record<string, any>[], structure: Record<string, any>, businessInfo: BusinessInfo) {
   const logPrefix = `[generate-website:${businessInfo.projectId}]`;
   console.log(`${logPrefix} Generating website code...`);
   
@@ -369,11 +411,16 @@ BUSINESS INFORMATION:
 - Business Name: ${businessInfo.businessName}
 - Business Type: ${businessInfo.businessType}
 - Description: ${businessInfo.description}
-${businessInfo.targetAudience ? `- Target Audience: ${businessInfo.targetAudience}` : ''}
+- Target Audience: ${businessInfo.targetAudience}
 ${businessInfo.location ? `- Location: ${businessInfo.location}` : ''}
 
 WEBSITE STRUCTURE: ${JSON.stringify(structure, null, 2)}
 PAGE CONTENT: ${JSON.stringify(pages, null, 2)}
+
+DESIGN PREFERENCES:
+- Template: ${businessInfo.websiteTemplate || 'modern'}
+- Color Scheme: ${JSON.stringify(businessInfo.colorScheme || structure.colorScheme)}
+- Typography: ${JSON.stringify(businessInfo.typography || structure.fonts)}
 
 Create a modern, professional website that specifically represents ${businessInfo.businessName}. Use the exact business name, incorporate the business type, and ensure all content reflects their specific services/products.
 
@@ -389,8 +436,7 @@ Requirements:
 - Fast loading with optimized code
 - Contact section with business location if provided
 - Professional typography and spacing suitable for ${businessInfo.businessType}
-- Color scheme from structure: ${JSON.stringify(structure.colorScheme)}
-- Use the specified fonts if available: ${JSON.stringify(structure.fonts || {})}
+- Use the specified color scheme and typography
 - Include a consistent navigation bar across all pages
 - Add proper links between pages
 
@@ -501,7 +547,7 @@ IMPORTANT: Ensure all HTML attributes with quotes are properly escaped in the JS
 }
 
 // Helper function to generate basic HTML for fallback pages
-function generateBasicHtml(pageName: string, businessInfo: any) {
+function generateBasicHtml(pageName: string, businessInfo: BusinessInfo) {
   const title = pageName.charAt(0).toUpperCase() + pageName.slice(1);
   
   return `<!DOCTYPE html>
@@ -555,7 +601,7 @@ function generateBasicHtml(pageName: string, businessInfo: any) {
 }
 
 // Helper function to generate page-specific content
-function getPageSpecificContent(pageName: string, businessInfo: any) {
+function getPageSpecificContent(pageName: string, businessInfo: BusinessInfo) {
   switch (pageName) {
     case 'home':
       return `
