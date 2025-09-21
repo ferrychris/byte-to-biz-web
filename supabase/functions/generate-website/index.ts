@@ -170,7 +170,11 @@ Return a JSON object with this structure:
   });
 
   const data = await response.json();
-  return JSON.parse(data.choices[0].message.content);
+  const content = data.choices[0].message.content;
+  
+  // Strip markdown code fences if present
+  const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  return JSON.parse(cleanContent);
 }
 
 async function generateWebsitePages(structure: any, businessInfo: any) {
@@ -221,7 +225,11 @@ Return a JSON object with:
     });
 
     const data = await response.json();
-    const pageContent = JSON.parse(data.choices[0].message.content);
+    const content = data.choices[0].message.content;
+    
+    // Strip markdown code fences if present
+    const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const pageContent = JSON.parse(cleanContent);
     
     pages.push({
       name: pageName,
@@ -277,5 +285,9 @@ Use placeholder images from Unsplash that match the business type.
   });
 
   const data = await response.json();
-  return JSON.parse(data.choices[0].message.content);
+  const content = data.choices[0].message.content;
+  
+  // Strip markdown code fences if present
+  const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  return JSON.parse(cleanContent);
 }
