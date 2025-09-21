@@ -265,7 +265,15 @@ Make sure the pages are relevant to a ${businessInfo.businessType} business and 
 async function generateWebsitePages(structure: any, businessInfo: any) {
   const logPrefix = `[generate-website:${businessInfo.projectId}]`;
   console.log(`${logPrefix} Generating website pages content...`);
+  console.log(`${logPrefix} Structure received:`, JSON.stringify(structure, null, 2));
+  
   const pages = [];
+  
+  // Ensure structure.pages is an array
+  if (!structure || !Array.isArray(structure.pages)) {
+    console.error(`${logPrefix} Error: structure.pages is not an array:`, structure);
+    throw new Error('Invalid website structure: pages must be an array');
+  }
   
   for (const pageName of structure.pages) {
     console.log(`${logPrefix} Generating content for ${pageName} page...`);

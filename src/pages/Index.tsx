@@ -89,8 +89,7 @@ const Index = () => {
       setGeneratedWebsite({
         url: response.deploymentUrl || `https://${data.businessName.toLowerCase().replace(/\s+/g, '-')}-${data.projectId.substring(0, 8)}.netlify.app`,
         title: `${data.businessName} - Professional Website`,
-        description: `Professional website for ${data.businessName} generated with AI`,
-        projectId: data.projectId
+        description: `Professional website for ${data.businessName} generated with AI`
       });
       
       setCurrentState("preview");
