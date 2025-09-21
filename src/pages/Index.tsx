@@ -20,8 +20,8 @@ interface BusinessInfo {
 type AppState = "auth" | "landing" | "form" | "generating" | "preview";
 
 const Index = () => {
-  const { user, loading: authLoading, signOut } = useAuth();
-  const [currentState, setCurrentState] = useState<AppState>("auth");
+  const { user, loading: authLoading, signOut, isLocalMode } = useAuth();
+  const [currentState, setCurrentState] = useState<AppState>(authLoading ? "auth" : user ? "landing" : "auth");
   const [businessInfo, setBusinessInfo] = useState<BusinessInfo | null>(null);
   const [generatedWebsite, setGeneratedWebsite] = useState({
     url: "https://acme-coffee-shop.netlify.app",

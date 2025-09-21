@@ -7,6 +7,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  isLocalMode: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -14,6 +15,7 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   loading: true,
   signOut: async () => {},
+  isLocalMode: false,
 });
 
 export const useAuth = () => {
@@ -32,31 +34,76 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isLocalMode, setIsLocalMode] = useState(false);
+  const [connectionError, setConnectionError] = useState(false);
 
   useEffect(() => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        if (event) {
+          setConnectionError(false);
+        }
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
       }
     );
 
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    // Get initial session with timeout
+    const fetchSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setSession(session);
+        setUser(session?.user ?? null);
+        setConnectionError(false);
+      } catch (error) {
+        console.error('Error getting session:', error);
+        setConnectionError(true);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    return () => subscription.unsubscribe();
+    // Set a timeout to prevent infinite loading
+    const timeout = window.setTimeout(() => {
+      setLoading(false);
+    }, 5000);
+
+    fetchSession();
+
+    return () => {
+      subscription.unsubscribe();
+      window.clearTimeout(timeout);
+    };
   }, []);
 
+  // Switch to local mode if connection error persists
+  useEffect(() => {
+    if (connectionError && !isLocalMode) {
+      setIsLocalMode(true);
+    }
+  }, [connectionError, isLocalMode]);
+
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.error('Error signing out:', error);
+    if (isLocalMode) {
+      // Handle local signout
+      setUser(null);
+      setSession(null);
+      localStorage.removeItem('byte_to_biz_local_auth');
+      return;
+    }
+    
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Error signing out:', error);
+      }
+    } catch (error) {
+      console.error('Error during sign out:', error);
+      // Fallback to local signout
+      setUser(null);
+      setSession(null);
     }
   };
 
@@ -65,6 +112,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     session,
     loading,
     signOut,
+    isLocalMode,
   };
 
   return (

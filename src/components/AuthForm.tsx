@@ -5,6 +5,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
+import { useLocalAuth } from '@/hooks/useLocalAuth';
+import { Switch } from '@/components/ui/switch';
+import { useAuth } from '@/hooks/useAuth';
 
 interface AuthFormProps {
   onAuthSuccess: () => void;
@@ -17,6 +20,11 @@ export const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const { isLocalMode } = useAuth();
+  const [useLocalMode, setUseLocalMode] = useState(isLocalMode);
+  
+  // Initialize local auth
+  const localAuth = useLocalAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,32 +32,68 @@ export const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
     setError('');
 
     try {
-      if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        
-        if (error) throw error;
-        onAuthSuccess();
+      if (useLocalMode) {
+        // Use local authentication
+        if (isLogin) {
+          const { error } = await localAuth.signIn(email, password);
+          if (error) throw error;
+          onAuthSuccess();
+        } else {
+          const { error } = await localAuth.signUp(email, password, fullName);
+          if (error) throw error;
+          onAuthSuccess();
+        }
       } else {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/`,
-            data: {
-              full_name: fullName,
-            },
-          },
-        });
-        
-        if (error) throw error;
-        
-        setError('Please check your email to confirm your account.');
+        // Use Supabase authentication
+        try {
+          if (isLogin) {
+            const { error } = await supabase.auth.signInWithPassword({
+              email,
+              password,
+            });
+            
+            if (error) throw error;
+            onAuthSuccess();
+          } else {
+            const { error } = await supabase.auth.signUp({
+              email,
+              password,
+              options: {
+                emailRedirectTo: 'http://localhost:8082/',
+                data: {
+                  full_name: fullName,
+                },
+              },
+            });
+            
+            if (error) throw error;
+            
+            setError('Please check your email to confirm your account.');
+          }
+        } catch (supabaseError: Error | unknown) {
+          console.error('Supabase authentication error:', supabaseError);
+          
+          // If Supabase fails with a network error, suggest local mode
+          if (supabaseError instanceof Error && 
+              (supabaseError.message?.includes('fetch') || 
+               supabaseError.message?.includes('network'))) {
+            setError('Network connection error with Supabase. Try using Local Mode for offline development.');
+          } else {
+            throw supabaseError;
+          }
+        }
       }
-    } catch (error: any) {
-      setError(error.message);
+    } catch (error: Error | unknown) {
+      console.error('Authentication error:', error);
+      if (error instanceof Error && error.message) {
+        if (error.message.includes('fetch') || error.message.includes('network')) {
+          setError('Network connection error. Please check your internet connection and try again.');
+        } else {
+          setError(error.message);
+        }
+      } else {
+        setError('An unknown error occurred. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -105,6 +149,17 @@ export const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
                 required
                 minLength={6}
               />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="local-mode"
+                checked={useLocalMode}
+                onCheckedChange={setUseLocalMode}
+              />
+              <Label htmlFor="local-mode" className="text-sm">
+                Use Local Mode {useLocalMode && "(Data stored in browser only)"}
+              </Label>
             </div>
 
             {error && (
