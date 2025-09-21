@@ -2,175 +2,40 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 import { enrichLocationData } from './location-enricher.ts';
-import { 
-  getTemplate, 
-  generateHeroSection, 
-  generateFeaturesSection, 
-  generateServicesSection, 
-  generateTestimonialsSection, 
-  generateContactSection,
-  generateEnhancedCss,
-  type DesignTemplate
-} from './design-templates.ts';
-
+import { getTemplate, generateEnhancedCss } from './design-templates.ts';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
-
-interface ColorScheme {
-  primary: string;
-  secondary: string;
-  accent: string;
-  background: string;
-  text: string;
-  muted: string;
-}
-
-interface Typography {
-  headings: string;
-  body: string;
-}
-
-interface GenerationRequest {
-  projectId: string;
-  businessName: string;
-  businessType: string;
-  description: string;
-  targetAudience?: string;
-  location?: string;
-  websiteTemplate?: string;
-  colorScheme?: ColorScheme;
-  typography?: Typography;
-  services?: Array<{
-    id: string;
-    name: string;
-    description?: string;
-    price?: string;
-    featured?: boolean;
-  }>;
-  locations?: LocationItem[];
-  showPricing?: boolean;
-}
-
-interface LocationItem {
-  id: string;
-  name: string;
-  address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  country: string;
-  phone?: string;
-  email?: string;
-  services: string[];
-  businessHours?: {
-    [key: string]: { open: string; close: string; closed?: boolean };
-  };
-  metadata: {
-    description: string;
-    keywords: string[];
-    localAreaKeywords: string[];
-  };
-  isPrimary: boolean;
-}
-
-interface BusinessInfo {
-  projectId: string;
-  businessName: string;
-  businessType: string;
-  description: string;
-  targetAudience?: string;
-  location?: string;
-  locations?: LocationItem[];
-  websiteTemplate?: string;
-  colorScheme?: ColorScheme;
-  typography?: Typography;
-  services?: Array<{
-    id: string;
-    name: string;
-    description?: string;
-    price?: string;
-    featured?: boolean;
-  }>;
-  showPricing?: boolean;
-}
-
-interface UnsplashImage {
-  url: string;
-  alt: string;
-  photographer: string;
-  photographerUrl: string;
-}
-
-interface PageSection {
-  type: string;
-  title: string;
-  content: string;
-  callToAction?: string;
-}
-
-interface WebsitePage {
-  name: string;
-  title: string;
-  sections: PageSection[];
-}
-
-interface GeneratedPage {
-  name: string;
-  title: string;
-  html: string;
-  url: string;
-}
-
-interface WebsiteContent {
-  pages: WebsitePage[];
-  brandMessage: string;
-  valuePropositions: string[];
-}
-
-declare const Deno: {
-  env: {
-    get: (key: string) => string | undefined;
-  };
-};
-
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY') || '';
 const unsplashAccessKey = Deno.env.get('UNSPLASH_ACCESS_KEY') || 'YOUR_UNSPLASH_ACCESS_KEY';
 const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-
-serve(async (req) => {
+serve(async (req)=>{
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, {
+      headers: corsHeaders
+    });
   }
-  
   // Set timeout to 5 minutes to prevent timeouts
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 300000);
-
+  const timeoutId = setTimeout(()=>controller.abort(), 300000);
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const authHeader = req.headers.get('authorization');
-    
     if (!authHeader) {
       throw new Error('No authorization header');
     }
-
     // Verify the JWT token
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
     if (authError || !user) {
       throw new Error('Invalid authentication');
     }
-
-    const { projectId, businessName, businessType, description, targetAudience, location, websiteTemplate, colorScheme, typography, services, locations, showPricing } = await req.json() as GenerationRequest;
-
+    const { projectId, businessName, businessType, description, targetAudience, location, websiteTemplate, colorScheme, typography, services, locations, showPricing } = await req.json();
     const logPrefix = `[generate-website:${projectId}]`;
     console.log(`${logPrefix} Starting enhanced website generation with GPT-5 and Unsplash integration`);
-
-    const businessInfo: BusinessInfo = {
+    const businessInfo = {
       projectId,
       businessName,
       businessType,
@@ -184,115 +49,88 @@ serve(async (req) => {
       locations,
       showPricing
     };
-
     // Enrich SEO metadata on locations before any generation
     if (businessInfo.locations && businessInfo.locations.length > 0) {
-      businessInfo.locations = businessInfo.locations.map(loc => enrichLocationMetadata(businessInfo, loc));
+      businessInfo.locations = businessInfo.locations.map((loc)=>enrichLocationMetadata(businessInfo, loc));
     }
-
     // Update progress stages
     await updateProgress(supabase, projectId, 'planning', 'in_progress', 10);
-    
     // Step 1: Generate enhanced content with GPT-5
     console.log(`${logPrefix} Generating content with GPT-5...`);
     await updateProgress(supabase, projectId, 'content_generation', 'in_progress', 25);
-    
     const websiteContent = await generateContentWithGPT5(businessInfo);
-    
     // Step 1.5: Enrich location data with AI-generated metadata if locations exist
     if (businessInfo.locations && businessInfo.locations.length > 0) {
       console.log(`${logPrefix} Enriching location metadata with AI...`);
       await updateProgress(supabase, projectId, 'location_metadata', 'in_progress', 35);
-      
-      businessInfo.locations = await enrichLocationData(
-        businessInfo.businessName,
-        businessInfo.businessType,
-        businessInfo.locations,
-        openAIApiKey
-      );
-      
+      businessInfo.locations = await enrichLocationData(businessInfo.businessName, businessInfo.businessType, businessInfo.locations, openAIApiKey);
       console.log(`${logPrefix} Location metadata enrichment completed`);
     }
-    
     // Step 2: Fetch high-quality images from Unsplash
     console.log(`${logPrefix} Fetching images from Unsplash...`);
     await updateProgress(supabase, projectId, 'image_generation', 'in_progress', 45);
-    
     const images = await fetchUnsplashImages(businessInfo);
-    
     // Step 3: Generate separate HTML pages
     console.log(`${logPrefix} Generating separate HTML pages...`);
     await updateProgress(supabase, projectId, 'page_generation', 'in_progress', 60);
-    
-    const separatePages = await generateSeparatePages(businessInfo, websiteContent, images);
-    
+    // Check if using Tailwind template - default to Tailwind if not specified
+    const template = getTemplate(businessInfo.websiteTemplate);
+    const isTailwind = template.useTailwind || (businessInfo.websiteTemplate || '').toLowerCase().includes('tailwind');
+    const separatePages = isTailwind ? await generateTailwindSeparatePages(businessInfo, websiteContent, images) : await generateSeparatePages(businessInfo, websiteContent, images);
     // Step 4: Generate enhanced HTML/CSS/JS
     console.log(`${logPrefix} Generating enhanced code...`);
     await updateProgress(supabase, projectId, 'code_generation', 'in_progress', 80);
-    
     const { html, css, js } = await generateEnhancedWebsite(businessInfo, websiteContent, images);
-    
     // Step 5: Finalize and save
     await updateProgress(supabase, projectId, 'finalization', 'in_progress', 95);
-    
     const previewUrl = `/preview?projectId=${projectId}`;
-    
     // Insert generated data
-    const { error: insertError } = await supabase
-      .from('website_generated_data')
-      .insert({
-        project_id: projectId,
-        html_content: html,
-        css_content: css,
-        js_content: js,
-        assets_urls: images.map(img => img.url),
-        metadata: {
-          structure: {
-            pages: websiteContent.pages.map(p => p.name),
-            colorScheme: colorScheme || {
-              primary: '#0d6efd',
-              secondary: '#6c757d', 
-              accent: '#ffc107',
-              background: '#ffffff',
-              text: '#212529'
-            },
-            layout: websiteTemplate || 'modern',
-            navigation: websiteContent.pages.map(p => p.title)
+    const { error: insertError } = await supabase.from('website_generated_data').insert({
+      project_id: projectId,
+      html_content: html,
+      css_content: css,
+      js_content: js,
+      assets_urls: images.map((img)=>img.url),
+      metadata: {
+        structure: {
+          pages: websiteContent.pages.map((p)=>p.name),
+          colorScheme: colorScheme || {
+            primary: '#0d6efd',
+            secondary: '#6c757d',
+            accent: '#ffc107',
+            background: '#ffffff',
+            text: '#212529'
           },
-          pages: websiteContent.pages,
-          generatedPages: separatePages,
-          brandMessage: websiteContent.brandMessage,
-          valuePropositions: websiteContent.valuePropositions,
-          images: images
-        }
-      });
-
+          layout: websiteTemplate || 'modern',
+          navigation: websiteContent.pages.map((p)=>p.title)
+        },
+        pages: websiteContent.pages,
+        generatedPages: separatePages,
+        brandMessage: websiteContent.brandMessage,
+        valuePropositions: websiteContent.valuePropositions,
+        images: images
+      }
+    });
     if (insertError) {
       throw insertError;
     }
-    
     // Create deployment record with local preview URL
     try {
-      const { error: deploymentError } = await supabase
-        .from('website_deployments')
-        .insert({
-          project_id: projectId,
-          deployment_url: previewUrl,
-          status: 'deployed',
-          provider: 'local'
-        });
-        
+      const { error: deploymentError } = await supabase.from('website_deployments').insert({
+        project_id: projectId,
+        deployment_url: previewUrl,
+        status: 'deployed',
+        provider: 'local'
+      });
       if (deploymentError) {
         // If the error is about the provider column, try without it
         if (deploymentError.message?.includes("provider")) {
           console.log(`${logPrefix} Provider column not found, trying without it`);
-          const { error: retryError } = await supabase
-            .from('website_deployments')
-            .insert({
-              project_id: projectId,
-              deployment_url: previewUrl,
-              status: 'deployed'
-            });
+          const { error: retryError } = await supabase.from('website_deployments').insert({
+            project_id: projectId,
+            deployment_url: previewUrl,
+            status: 'deployed'
+          });
           if (retryError) {
             console.error(`${logPrefix} Error creating deployment record (retry):`, retryError);
           }
@@ -303,46 +141,44 @@ serve(async (req) => {
     } catch (deployErr) {
       console.error(`${logPrefix} Exception creating deployment record:`, deployErr);
     }
-
     // Update project status and URL
-    await supabase
-      .from('website_projects')
-      .update({ 
-        status: 'completed',
-        deployment_url: previewUrl 
-      })
-      .eq('id', projectId);
-
+    await supabase.from('website_projects').update({
+      status: 'completed',
+      deployment_url: previewUrl
+    }).eq('id', projectId);
     await updateProgress(supabase, projectId, 'completed', 'completed', 100);
-
     clearTimeout(timeoutId);
-    return new Response(JSON.stringify({ 
+    return new Response(JSON.stringify({
       success: true,
       previewUrl: previewUrl,
       pages: separatePages
     }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
     });
-
   } catch (error) {
     clearTimeout(timeoutId);
     console.error('Error in website generation:', error);
-    
-    return new Response(JSON.stringify({ 
+    return new Response(JSON.stringify({
       error: error.message,
-      success: false 
+      success: false
     }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
     });
   }
 });
-
-async function generateContentWithGPT5(businessInfo: BusinessInfo): Promise<WebsiteContent> {
+async function generateContentWithGPT5(businessInfo) {
   const logPrefix = `[generate-website:${businessInfo.projectId}]`;
-  const openAIModel = Deno.env.get('OPENAI_MODEL') || 'gpt-4o';
+  const openAIModel = Deno.env.get('OPENAI_MODEL') || 'gpt-5';
+  const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
   console.log(`${logPrefix} Generating content with OpenAI model: ${openAIModel}...`);
-  
+  console.log(`${logPrefix} OpenAI API Key available: ${!!openAIApiKey}`);
   const prompt = `You are an expert web designer and copywriter. Create compelling, professional website content for a ${businessInfo.businessType} business.
 
 Business Details:
@@ -384,83 +220,89 @@ IMPORTANT: Return ONLY valid JSON with no markdown formatting, code fences, or a
   "brandMessage": "Core brand promise in one compelling sentence",
   "valuePropositions": ["Value 1", "Value 2", "Value 3", "Value 4", "Value 5"]
 }`;
-
+  // Create fallback content function to avoid duplication
+  const getFallbackContent = ()=>({
+      pages: [
+        {
+          name: 'home',
+          title: `${businessInfo.businessName} - Home`,
+          sections: [
+            {
+              type: 'hero',
+              title: `Welcome to ${businessInfo.businessName}`,
+              content: `Professional ${businessInfo.businessType} services that exceed expectations. ${businessInfo.description}`,
+              callToAction: 'Get Started Today'
+            },
+            {
+              type: 'features',
+              title: 'Why Choose Us',
+              content: 'Expert professionals | Quality guaranteed | Customer focused | Competitive pricing',
+              callToAction: 'Learn More'
+            }
+          ]
+        },
+        {
+          name: 'about',
+          title: `About ${businessInfo.businessName}`,
+          sections: [
+            {
+              type: 'story',
+              title: 'Our Story',
+              content: `${businessInfo.businessName} has been providing exceptional ${businessInfo.businessType} services. We are committed to delivering the highest quality results for our clients.`,
+              callToAction: 'Contact Us'
+            }
+          ]
+        },
+        {
+          name: 'services',
+          title: `Our Services - ${businessInfo.businessName}`,
+          sections: [
+            {
+              type: 'services',
+              title: 'What We Offer',
+              content: `Comprehensive ${businessInfo.businessType} solutions tailored to your needs. We provide professional services with attention to detail and customer satisfaction.`,
+              callToAction: 'Request Quote'
+            }
+          ]
+        },
+        {
+          name: 'contact',
+          title: `Contact ${businessInfo.businessName}`,
+          sections: [
+            {
+              type: 'contact',
+              title: 'Get In Touch',
+              content: `Ready to get started? Contact ${businessInfo.businessName} today for professional ${businessInfo.businessType} services.`,
+              callToAction: 'Call Now'
+            }
+          ]
+        }
+      ],
+      brandMessage: `${businessInfo.businessName} - Your trusted partner for ${businessInfo.businessType} excellence`,
+      valuePropositions: [
+        'Professional expertise',
+        'Quality guaranteed',
+        'Customer satisfaction',
+        'Competitive pricing',
+        'Reliable service'
+      ]
+    });
   try {
     if (!openAIApiKey || openAIApiKey === '') {
-      // Fallback content when OpenAI is not available
-      return {
-        pages: [
-          {
-            name: 'home',
-            title: `${businessInfo.businessName} - Home`,
-            sections: [
-              {
-                type: 'hero',
-                title: `Welcome to ${businessInfo.businessName}`,
-                content: `Professional ${businessInfo.businessType} services that exceed expectations. ${businessInfo.description}`,
-                callToAction: 'Get Started Today'
-              },
-              {
-                type: 'features',
-                title: 'Why Choose Us',
-                content: 'Expert professionals | Quality guaranteed | Customer focused | Competitive pricing',
-                callToAction: 'Learn More'
-              }
-            ]
-          },
-          {
-            name: 'about',
-            title: `About ${businessInfo.businessName}`,
-            sections: [
-              {
-                type: 'story',
-                title: 'Our Story',
-                content: `${businessInfo.businessName} has been providing exceptional ${businessInfo.businessType} services. We are committed to delivering the highest quality results for our clients.`,
-                callToAction: 'Contact Us'
-              }
-            ]
-          },
-          {
-            name: 'services',
-            title: `Our Services - ${businessInfo.businessName}`,
-            sections: [
-              {
-                type: 'services',
-                title: 'What We Offer',
-                content: `Comprehensive ${businessInfo.businessType} solutions tailored to your needs. We provide professional services with attention to detail and customer satisfaction.`,
-                callToAction: 'Request Quote'
-              }
-            ]
-          },
-          {
-            name: 'contact',
-            title: `Contact ${businessInfo.businessName}`,
-            sections: [
-              {
-                type: 'contact',
-                title: 'Get In Touch',
-                content: `Ready to get started? Contact ${businessInfo.businessName} today for professional ${businessInfo.businessType} services.`,
-                callToAction: 'Call Now'
-              }
-            ]
-          }
-        ],
-        brandMessage: `${businessInfo.businessName} - Your trusted partner for ${businessInfo.businessType} excellence`,
-        valuePropositions: [
-          'Professional expertise',
-          'Quality guaranteed',
-          'Customer satisfaction',
-          'Competitive pricing',
-          'Reliable service'
-        ]
-      };
+      console.log(`${logPrefix} No OpenAI API key found, using fallback content`);
+      return getFallbackContent();
     }
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    console.log(`${logPrefix} Making OpenAI API request...`);
+    // Create a timeout promise
+    const timeoutPromise = new Promise((_, reject)=>{
+      setTimeout(()=>reject(new Error('OpenAI API request timed out after 30 seconds')), 30000);
+    });
+    // Create the API request promise
+    const apiRequestPromise = fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: openAIModel,
@@ -475,83 +317,62 @@ IMPORTANT: Return ONLY valid JSON with no markdown formatting, code fences, or a
           }
         ],
         temperature: 0.7,
-        max_tokens: 3000,
-      }),
+        max_tokens: 3000
+      })
     });
-
+    // Race between API request and timeout
+    const response = await Promise.race([
+      apiRequestPromise,
+      timeoutPromise
+    ]);
+    console.log(`${logPrefix} OpenAI API response status: ${response.status}`);
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`);
+      const errorText = await response.text();
+      console.error(`${logPrefix} OpenAI API error: ${response.status} ${response.statusText}`, errorText);
+      throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
     }
-
     const data = await response.json();
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      console.error(`${logPrefix} Invalid OpenAI API response structure:`, data);
+      throw new Error('Invalid OpenAI API response structure');
+    }
     const content = data.choices[0].message.content;
-    
-    console.log(`${logPrefix} Raw GPT response:`, content?.substring(0, 200) + '...');
-    
+    console.log(`${logPrefix} Raw GPT response received (${content?.length || 0} chars)`);
+    if (!content) {
+      console.error(`${logPrefix} Empty content from OpenAI API`);
+      throw new Error('Empty content from OpenAI API');
+    }
     // Clean the content by removing markdown code fences and extra whitespace
     let cleanContent = content;
-    if (cleanContent) {
-      // Remove markdown code fences
-      cleanContent = cleanContent.replace(/```json\s*\n?/gi, '').replace(/```\s*\n?/g, '').trim();
-      // Remove any leading/trailing non-JSON text
-      const jsonStart = cleanContent.indexOf('{');
-      const jsonEnd = cleanContent.lastIndexOf('}');
-      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-        cleanContent = cleanContent.substring(jsonStart, jsonEnd + 1);
-      }
+    // Remove markdown code fences
+    cleanContent = cleanContent.replace(/```json\s*\n?/gi, '').replace(/```\s*\n?/g, '').trim();
+    // Remove any leading/trailing non-JSON text
+    const jsonStart = cleanContent.indexOf('{');
+    const jsonEnd = cleanContent.lastIndexOf('}');
+    if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+      cleanContent = cleanContent.substring(jsonStart, jsonEnd + 1);
     }
-    
     try {
       const parsed = JSON.parse(cleanContent);
       console.log(`${logPrefix} Successfully parsed GPT response`);
+      // Validate the parsed content has required structure
+      if (!parsed.pages || !Array.isArray(parsed.pages) || parsed.pages.length === 0) {
+        console.error(`${logPrefix} Invalid content structure - missing pages`);
+        throw new Error('Invalid content structure - missing pages');
+      }
       return parsed;
     } catch (parseError) {
       console.error(`${logPrefix} Error parsing GPT response:`, parseError);
-      console.error(`${logPrefix} Cleaned content:`, cleanContent?.substring(0, 500) + '...');
-      return {
-        pages: [
-          {
-            name: 'home',
-            title: `${businessInfo.businessName} - Home`,
-            sections: [
-              {
-                type: 'hero',
-                title: `Welcome to ${businessInfo.businessName}`,
-                content: `Professional ${businessInfo.businessType} services. ${businessInfo.description}`,
-                callToAction: 'Get Started'
-              }
-            ]
-          }
-        ],
-        brandMessage: `${businessInfo.businessName} - Professional ${businessInfo.businessType} services`,
-        valuePropositions: ['Quality service', 'Expert team', 'Customer focused']
-      };
+      console.error(`${logPrefix} Cleaned content (first 500 chars):`, cleanContent?.substring(0, 500));
+      throw new Error(`Failed to parse GPT response: ${parseError.message}`);
     }
   } catch (error) {
-    console.error('GPT-5 content generation failed:', error);
-    // Return fallback content
-    return {
-      pages: [
-        {
-          name: 'home',
-          title: `${businessInfo.businessName} - Home`,
-          sections: [
-            {
-              type: 'hero',
-              title: `Welcome to ${businessInfo.businessName}`,
-              content: `Professional ${businessInfo.businessType} services. ${businessInfo.description}`,
-              callToAction: 'Get Started'
-            }
-          ]
-        }
-      ],
-      brandMessage: `${businessInfo.businessName} - Professional ${businessInfo.businessType} services`,
-      valuePropositions: ['Quality service', 'Expert team', 'Customer focused']
-    };
+    console.error(`${logPrefix} Content generation failed:`, error.message);
+    console.log(`${logPrefix} Using fallback content due to error`);
+    return getFallbackContent();
   }
 }
-
-async function fetchUnsplashImages(businessInfo: BusinessInfo): Promise<UnsplashImage[]> {
+async function fetchUnsplashImages(businessInfo) {
   try {
     const searchTerms = [
       businessInfo.businessType,
@@ -559,25 +380,18 @@ async function fetchUnsplashImages(businessInfo: BusinessInfo): Promise<Unsplash
       'professional',
       'modern office'
     ];
-    
-    const images: UnsplashImage[] = [];
-    
-    for (const term of searchTerms.slice(0, 2)) {
+    const images = [];
+    for (const term of searchTerms.slice(0, 2)){
       try {
-        const response = await fetch(
-          `https://api.unsplash.com/search/photos?query=${encodeURIComponent(term)}&per_page=3&orientation=landscape&order_by=relevant&content_filter=high`,
-          {
-            headers: {
-              'Authorization': `Client-ID ${unsplashAccessKey}`,
-            },
+        const response = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(term)}&per_page=3&orientation=landscape&order_by=relevant&content_filter=high`, {
+          headers: {
+            'Authorization': `Client-ID ${unsplashAccessKey}`
           }
-        );
-
+        });
         if (response.ok) {
           const data = await response.json();
           const unsplashImages = data.results?.slice(0, 2) || [];
-          
-          for (const img of unsplashImages) {
+          for (const img of unsplashImages){
             images.push({
               url: img.urls?.full || img.urls?.regular || img.urls?.small || '',
               alt: img.alt_description || `${term} image`,
@@ -590,7 +404,6 @@ async function fetchUnsplashImages(businessInfo: BusinessInfo): Promise<Unsplash
         console.error(`Error fetching images for term ${term}:`, termError);
       }
     }
-
     // Fallback to placeholder images if Unsplash fails
     if (images.length === 0) {
       return [
@@ -603,12 +416,11 @@ async function fetchUnsplashImages(businessInfo: BusinessInfo): Promise<Unsplash
         {
           url: 'https://images.unsplash.com/photo-1553484771-047a44eee27b?w=800&h=600&fit=crop',
           alt: 'Modern office space',
-          photographer: 'Unsplash', 
+          photographer: 'Unsplash',
           photographerUrl: 'https://unsplash.com'
         }
       ];
     }
-
     return images;
   } catch (error) {
     console.error('Unsplash API error:', error);
@@ -623,27 +435,51 @@ async function fetchUnsplashImages(businessInfo: BusinessInfo): Promise<Unsplash
     ];
   }
 }
-
-async function generateEnhancedWebsite(
-  businessInfo: BusinessInfo,
-  websiteContent: WebsiteContent,
-  images: UnsplashImage[]
-): Promise<{ html: string; css: string; js: string }> {
+async function generateEnhancedWebsite(businessInfo, websiteContent, images) {
   const logPrefix = `[generate-website:${businessInfo.projectId}]`;
   console.log(`${logPrefix} Generating enhanced HTML/CSS/JS with modern design templates...`);
-  
   // Get the design template
   const template = getTemplate(businessInfo.websiteTemplate);
-  
+  // If user wants Tailwind output, use Tailwind styling in separate pages (generated by main flow)
+  if (template.useTailwind || (businessInfo.websiteTemplate || '').toLowerCase().includes('tailwind')) {
+    // Generate a simple single-page HTML for fallback, but separate pages will be used for navigation
+    const primaryImage = images[0]?.url || 'https://images.unsplash.com/photo-1560472354-b43ff0c44a43?w=1200&h=600&fit=crop';
+    const heroTitle = websiteContent.pages[0]?.sections[0]?.title || `Welcome to ${businessInfo.businessName}`;
+    const heroContent = websiteContent.pages[0]?.sections[0]?.content || businessInfo.description;
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${businessInfo.businessName} - ${businessInfo.businessType}</title>
+  <meta name="description" content="${businessInfo.description}">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+  </style>
+</head>
+<body class="bg-white min-h-screen flex items-center justify-center">
+  <div class="max-w-2xl mx-auto text-center px-6">
+    <h1 class="text-4xl font-bold mb-4">${heroTitle}</h1>
+    <p class="text-lg text-gray-600 mb-6">${heroContent}</p>
+    <p class="text-gray-500">Generated with Tailwind CSS • Navigate via menu</p>
+  </div>
+</body>
+</html>`;
+    return {
+      html,
+      css: '',
+      js: ''
+    };
+  }
   const colorScheme = businessInfo.colorScheme || {
     ...template.colorScheme,
     muted: template.colorScheme.muted
   };
   const typography = businessInfo.typography || template.typography;
-
   const primaryImage = images[0] || null;
   const heroImage = primaryImage ? primaryImage.url : 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=1200&h=600&fit=crop';
-
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -673,7 +509,7 @@ async function generateEnhancedWebsite(
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                    ${websiteContent.pages.map(page => `
+                    ${websiteContent.pages.map((page)=>`
                         <li class="nav-item">
                             <a class="nav-link" href="#${page.name}">${page.title}</a>
                         </li>
@@ -770,16 +606,12 @@ async function generateEnhancedWebsite(
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                    ${websiteContent.pages.map(page => {
-                        const pageName = page.name === 'home' ? 'Home' : 
-                                       page.name === 'about' ? 'About' :
-                                       page.name === 'services' ? 'Services' :
-                                       page.name === 'contact' ? 'Contact' :
-                                       page.name.charAt(0).toUpperCase() + page.name.slice(1);
-                        return `<li class="nav-item">
+                    ${websiteContent.pages.map((page)=>{
+    const pageName = page.name === 'home' ? 'Home' : page.name === 'about' ? 'About' : page.name === 'services' ? 'Services' : page.name === 'contact' ? 'Contact' : page.name.charAt(0).toUpperCase() + page.name.slice(1);
+    return `<li class="nav-item">
                             <a class="nav-link" href="#${page.name}-section">${pageName}</a>
                         </li>`;
-                    }).join('')}
+  }).join('')}
                 </ul>
             </div>
         </div>
@@ -810,9 +642,14 @@ async function generateEnhancedWebsite(
                 </div>
             </div>
             <div class="row g-4">
-                ${websiteContent.valuePropositions.slice(0, 4).map((value, index) => {
-                    const icons = ['fas fa-star', 'fas fa-users', 'fas fa-award', 'fas fa-heart'];
-                    return `
+                ${websiteContent.valuePropositions.slice(0, 4).map((value, index)=>{
+    const icons = [
+      'fas fa-star',
+      'fas fa-users',
+      'fas fa-award',
+      'fas fa-heart'
+    ];
+    return `
                     <div class="col-lg-3 col-md-6">
                         <div class="feature-card text-center">
                             <div class="feature-icon">
@@ -822,7 +659,7 @@ async function generateEnhancedWebsite(
                             <p>Excellence in every aspect of our ${businessInfo.businessType} services.</p>
                         </div>
                     </div>`;
-                }).join('')}
+  }).join('')}
             </div>
         </div>
     </section>
@@ -931,9 +768,7 @@ async function generateEnhancedWebsite(
                 </div>
                 <div class="col-lg-4 col-md-6 mb-4">
                     <h5 class="mb-3">Quick Links</h5>
-                    ${websiteContent.pages.map(page => 
-                        `<p><a href="#${page.name}" class="footer-link">${page.title.split(' - ')[0]}</a></p>`
-                    ).join('')}
+                    ${websiteContent.pages.map((page)=>`<p><a href="#${page.name}" class="footer-link">${page.title.split(' - ')[0]}</a></p>`).join('')}
                 </div>
                 <div class="col-lg-4 col-md-6 mb-4">
                     <h5 class="mb-3">Contact Info</h5>
@@ -1004,40 +839,28 @@ async function generateEnhancedWebsite(
     </script>
 </body>
 </html>`;
-
   const css = `/* Enhanced CSS already included in HTML */`;
   const js = `/* Enhanced JavaScript already included in HTML */`;
-
-  return { html, css, js };
+  return {
+    html,
+    css,
+    js
+  };
 }
-
-async function updateProgress(
-  supabase: ReturnType<typeof createClient>,
-  projectId: string,
-  stage: string,
-  status: string,
-  percentage: number,
-  jobId?: string
-) {
+async function updateProgress(supabase, projectId, stage, status, percentage, jobId) {
   try {
     // Use upsert with onConflict to ensure one progress row per project
-    const { error } = await supabase
-      .from('generation_progress')
-      .upsert(
-        {
-          job_id: jobId || projectId, // Use projectId as fallback for job_id
-          project_id: projectId,
-          stage,
-          status,
-          progress_percentage: percentage,
-          timestamp: new Date().toISOString() // Update timestamp on each progress update
-        },
-        { 
-          onConflict: 'project_id', // Only keep one progress row per project
-          ignoreDuplicates: false // Update existing row on conflict
-        }
-      );
-    
+    const { error } = await supabase.from('generation_progress').upsert({
+      job_id: jobId || projectId,
+      project_id: projectId,
+      stage,
+      status,
+      progress_percentage: percentage,
+      timestamp: new Date().toISOString() // Update timestamp on each progress update
+    }, {
+      onConflict: 'project_id',
+      ignoreDuplicates: false // Update existing row on conflict
+    });
     if (error) {
       console.error(`Error updating progress for ${projectId}:`, JSON.stringify(error, null, 2));
     } else {
@@ -1047,22 +870,15 @@ async function updateProgress(
     console.error(`Error updating progress for ${projectId}:`, JSON.stringify(error, null, 2));
   }
 }
-
-function enrichLocationMetadata(businessInfo: BusinessInfo, loc: LocationItem): LocationItem {
+function enrichLocationMetadata(businessInfo, loc) {
   const businessType = businessInfo.businessType || '';
   const businessName = businessInfo.businessName || '';
   const city = loc.city || '';
   const state = loc.state || '';
-  const services: string[] = Array.isArray(loc.services) && loc.services.length > 0
-    ? loc.services
-    : (Array.isArray(businessInfo.services)
-        ? (businessInfo.services as any[]).map((s) => typeof s === 'string' ? s : (s?.name ?? '')).filter(Boolean)
-        : []);
-
-  const existingMeta = (loc as any).metadata || {};
-  const existingKeywords: string[] = Array.isArray(existingMeta.localAreaKeywords) ? existingMeta.localAreaKeywords : [];
-  const keywordSet = new Set<string>(existingKeywords);
-
+  const services = Array.isArray(loc.services) && loc.services.length > 0 ? loc.services : Array.isArray(businessInfo.services) ? businessInfo.services.map((s)=>typeof s === 'string' ? s : s?.name ?? '').filter(Boolean) : [];
+  const existingMeta = loc.metadata || {};
+  const existingKeywords = Array.isArray(existingMeta.localAreaKeywords) ? existingMeta.localAreaKeywords : [];
+  const keywordSet = new Set(existingKeywords);
   if (city) {
     keywordSet.add(`${businessType} ${city}`);
     keywordSet.add(`${businessName} ${city}`);
@@ -1070,16 +886,12 @@ function enrichLocationMetadata(businessInfo: BusinessInfo, loc: LocationItem): 
   if (state) {
     keywordSet.add(`${businessType} ${state}`);
   }
-  services.forEach((svc) => {
+  services.forEach((svc)=>{
     if (!svc) return;
     if (city) keywordSet.add(`${svc} ${city}`);
     if (state) keywordSet.add(`${svc} ${state}`);
   });
-
-  const description: string = typeof existingMeta.description === 'string' && existingMeta.description.trim().length > 0
-    ? existingMeta.description
-    : `Professional ${businessType.toLowerCase()} services in ${city}${state ? ", " + state : ''} at ${businessName} - ${loc.name}. We offer ${services.join(', ')}.`;
-
+  const description = typeof existingMeta.description === 'string' && existingMeta.description.trim().length > 0 ? existingMeta.description : `Professional ${businessType.toLowerCase()} services in ${city}${state ? ", " + state : ''} at ${businessName} - ${loc.name}. We offer ${services.join(', ')}.`;
   return {
     ...loc,
     metadata: {
@@ -1087,10 +899,9 @@ function enrichLocationMetadata(businessInfo: BusinessInfo, loc: LocationItem): 
       description,
       localAreaKeywords: Array.from(keywordSet)
     }
-  } as LocationItem;
+  };
 }
-
-function generateBasicCss(colorScheme: ColorScheme, typography: Typography) {
+function generateBasicCss(colorScheme, typography) {
   return `
 /* Custom styles */
 
@@ -1142,7 +953,6 @@ footer {
 }
 `;
 }
-
 function generateBasicJs() {
   return `
 // Form validation
@@ -1200,12 +1010,9 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
 });
 `;
 }
-
-
-async function generateWebsiteStructure(businessInfo: BusinessInfo) {
+async function generateWebsiteStructure(businessInfo) {
   const logPrefix = `[generate-website:${businessInfo.projectId}]`;
   console.log(`${logPrefix} Generating website structure using GPT-5...`);
-  
   const prompt = `
 You are creating a website structure for "${businessInfo.businessName}", a ${businessInfo.businessType} business.
 
@@ -1240,32 +1047,33 @@ Return a JSON object with this structure:
 
 Make sure the pages are relevant to a ${businessInfo.businessType} business and the colors match the industry. Choose a color scheme that conveys the right emotion and brand identity for this specific business.
   `;
-
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${openAIApiKey}`,
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       model: 'gpt-4o',
       messages: [
-        { role: 'system', content: 'You are a professional web designer specializing in creating unique website structures for businesses. Return only valid JSON.' },
-        { role: 'user', content: prompt }
+        {
+          role: 'system',
+          content: 'You are a professional web designer specializing in creating unique website structures for businesses. Return only valid JSON.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
       ],
-      temperature: 0.7,
-    }),
+      temperature: 0.7
+    })
   });
-
   const data = await response.json();
-  
   if (!data.choices || !data.choices[0]) {
     console.error(`${logPrefix} Error in OpenAI response:`, data);
     throw new Error('Failed to generate website structure');
   }
-  
   const content = data.choices[0].message.content;
-  
   // Strip markdown code fences if present
   const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   try {
@@ -1276,21 +1084,17 @@ Make sure the pages are relevant to a ${businessInfo.businessType} business and 
     throw new Error('Failed to parse website structure JSON');
   }
 }
-
-async function generateWebsitePages(structure: Record<string, unknown>, businessInfo: BusinessInfo) {
+async function generateWebsitePages(structure, businessInfo) {
   const logPrefix = `[generate-website:${businessInfo.projectId}]`;
   console.log(`${logPrefix} Generating website pages content...`);
   console.log(`${logPrefix} Structure received:`, JSON.stringify(structure, null, 2));
-  
-  const pages: Array<{ name: string } & Record<string, unknown>> = [];
-  
+  const pages = [];
   // Ensure structure.pages is an array
   if (!structure || !Array.isArray(structure.pages)) {
     console.error(`${logPrefix} Error: structure.pages is not an array:`, structure);
     throw new Error('Invalid website structure: pages must be an array');
   }
-  
-  for (const pageName of structure.pages) {
+  for (const pageName of structure.pages){
     console.log(`${logPrefix} Generating content for ${pageName} page...`);
     const prompt = `
 Create compelling, detailed content for the ${pageName} page of "${businessInfo.businessName}".
@@ -1328,60 +1132,56 @@ For the ${pageName} page, return a JSON object with:
 
 Make sure all content is specifically tailored to ${businessInfo.businessName} and not generic. Include at least 3-5 sections that would be most relevant for a ${businessInfo.businessType} business.
     `;
-
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: 'gpt-4o',
         messages: [
-          { role: 'system', content: 'You are a professional copywriter and SEO expert specializing in business websites. Return only valid JSON.' },
-          { role: 'user', content: prompt }
+          {
+            role: 'system',
+            content: 'You are a professional copywriter and SEO expert specializing in business websites. Return only valid JSON.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
         ],
-        temperature: 0.7,
-      }),
+        temperature: 0.7
+      })
     });
-
     if (!response.ok) {
       console.error(`${logPrefix} OpenAI API error: ${response.status} ${response.statusText}`);
       throw new Error(`Failed to generate content for ${pageName} page`);
     }
-
     const data = await response.json();
-    
     if (!data.choices?.[0]) {
       console.error(`${logPrefix} No choices returned from OpenAI for ${pageName} page`);
       throw new Error(`Failed to generate content for ${pageName} page`);
     }
-    
-    const content = data.choices[0].message.content as string;
-    
+    const content = data.choices[0].message.content;
     // Strip markdown code fences if present
     const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     try {
       const pageContent = JSON.parse(cleanContent);
-      
       pages.push({
         name: pageName,
-        ...(pageContent as Record<string, unknown>)
-      } as { name: string } & Record<string, unknown>);
+        ...pageContent
+      });
     } catch (error) {
       console.error(`${logPrefix} Error parsing JSON for ${pageName} page:`, error);
       console.error(`${logPrefix} Raw content:`, cleanContent);
       throw new Error(`Failed to parse JSON for ${pageName} page`);
     }
   }
-  
   return pages;
 }
-
-async function generateWebsiteCode(pages: Record<string, unknown>[], structure: Record<string, unknown>, businessInfo: BusinessInfo) {
+async function generateWebsiteCode(pages, structure, businessInfo) {
   const logPrefix = `[generate-website:${businessInfo.projectId}]`;
   console.log(`${logPrefix} Generating website code...`);
-  
   const prompt = `
 Generate a complete, professional website for "${businessInfo.businessName}", a ${businessInfo.businessType} business.
 
@@ -1447,49 +1247,46 @@ Make sure to include the Bootstrap 5 CDN links in each HTML file. The website sh
 
 IMPORTANT: Ensure all HTML attributes with quotes are properly escaped in the JSON response.
   `;
-
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${openAIApiKey}`,
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       model: 'gpt-4o',
       messages: [
-        { role: 'system', content: 'You are an expert full-stack web developer specializing in creating beautiful, functional websites for businesses using Bootstrap 5. Generate production-ready code with separate HTML files for each page. Return only valid JSON. Make sure to properly escape all quotes in HTML attributes.' },
-        { role: 'user', content: prompt }
+        {
+          role: 'system',
+          content: 'You are an expert full-stack web developer specializing in creating beautiful, functional websites for businesses using Bootstrap 5. Generate production-ready code with separate HTML files for each page. Return only valid JSON. Make sure to properly escape all quotes in HTML attributes.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
       ],
       temperature: 0.3,
-      max_tokens: 4000,
-    }),
+      max_tokens: 4000
+    })
   });
-
   const data = await response.json();
-  
   if (!data.choices || !data.choices[0]) {
     console.error(`${logPrefix} Error in OpenAI response for website code:`, data);
     throw new Error('Failed to generate website code');
   }
-  
   const content = data.choices[0].message.content;
-  
   // Strip markdown code fences if present
   const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  
   try {
     // First attempt to parse the JSON directly
     return JSON.parse(cleanContent);
   } catch (error) {
     console.error(`${logPrefix} Error parsing JSON for website code:`, error);
     console.error(`${logPrefix} Raw content (first 1000 chars):`, cleanContent.substring(0, 1000));
-    
     // Fallback: Generate a simplified structure with basic pages
     console.log(`${logPrefix} Generating fallback website structure...`);
-    
     // Try to fix common JSON issues before giving up
     let fixedContent = cleanContent;
-    
     // Try to fix unterminated strings by finding the last complete object
     try {
       // Find the last complete closing brace
@@ -1502,32 +1299,33 @@ IMPORTANT: Ensure all HTML attributes with quotes are properly escaped in the JS
     } catch (fixError) {
       console.log(`${logPrefix} Truncation fix failed, proceeding with fallback generation`);
     }
-    
     // If JSON fixing didn't work, generate fallback pages
-    const defaultPages = ['home', 'about', 'services', 'contact'];
-    const fallbackPages: Array<{name: string, html: string}> = [];
-    
-    for (const pageName of defaultPages) {
+    const defaultPages = [
+      'home',
+      'about',
+      'services',
+      'contact'
+    ];
+    const fallbackPages = [];
+    for (const pageName of defaultPages){
       fallbackPages.push({
         name: pageName,
         html: generateBasicHtml(pageName, businessInfo)
       });
     }
-    
     // Return the fallback structure
     const defaultColorScheme = {
-      primary: '#0d6efd',
-      secondary: '#6c757d', 
-      accent: '#ffc107',
-      background: '#ffffff',
-      text: '#212529'
+      primary: '#0066cc',
+      secondary: '#666',
+      accent: '#ff6b35',
+      background: '#f8f9fa',
+      text: '#333',
+      muted: '#6c757d'
     };
-    
     const defaultTypography = {
       headings: 'Roboto',
       body: 'Open Sans'
     };
-
     return {
       pages: fallbackPages,
       css: generateBasicCss(defaultColorScheme, defaultTypography),
@@ -1536,11 +1334,9 @@ IMPORTANT: Ensure all HTML attributes with quotes are properly escaped in the JS
     };
   }
 }
-
 // Helper function to generate basic HTML for fallback pages
-function generateBasicHtml(pageName: string, businessInfo: BusinessInfo) {
+function generateBasicHtml(pageName, businessInfo) {
   const title = pageName.charAt(0).toUpperCase() + pageName.slice(1);
-  
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1590,10 +1386,9 @@ function generateBasicHtml(pageName: string, businessInfo: BusinessInfo) {
 </body>
 </html>`;
 }
-
 // Helper function to generate page-specific content
-function getPageSpecificContent(pageName: string, businessInfo: BusinessInfo) {
-  switch (pageName) {
+function getPageSpecificContent(pageName, businessInfo) {
+  switch(pageName){
     case 'home':
       return `
         <section>
@@ -1718,18 +1513,30 @@ function getPageSpecificContent(pageName: string, businessInfo: BusinessInfo) {
       `;
   }
 }
-
-// Function to generate separate HTML pages
-async function generateSeparatePages(businessInfo: BusinessInfo, websiteContent: WebsiteContent, images: UnsplashImage[]): Promise<GeneratedPage[]> {
+// Function to generate separate Tailwind HTML pages
+async function generateTailwindSeparatePages(businessInfo, websiteContent, images) {
   const logPrefix = `[generate-website:${businessInfo.projectId}]`;
-  const pages: GeneratedPage[] = [];
-  
+  const pages = [];
+  const colorScheme = {
+    primary: '#0066cc',
+    secondary: '#666',
+    accent: '#ff6b35',
+    background: '#f8f9fa',
+    text: '#333',
+    muted: '#6c757d'
+  };
+  const typography = {
+    headings: 'Inter',
+    body: 'Inter'
+  };
+  const heroImage = images[0] || {
+    url: 'https://via.placeholder.com/1200x600',
+    alt: 'Hero image'
+  };
+  console.log(`${logPrefix} Generating ${websiteContent.pages.length} Tailwind pages...`);
   // Generate main pages
-  for (const page of websiteContent.pages) {
-    console.log(`${logPrefix} Generating ${page.name} page...`);
-    
-    const pageHtml = await generatePageHTML(businessInfo, page, websiteContent, images);
-    
+  for (const page of websiteContent.pages){
+    const pageHtml = generateTailwindPageHTML(businessInfo, page, websiteContent, images, colorScheme, typography, heroImage);
     pages.push({
       name: page.name,
       title: page.title,
@@ -1737,13 +1544,34 @@ async function generateSeparatePages(businessInfo: BusinessInfo, websiteContent:
       url: `/${page.name === 'home' ? '' : page.name}`
     });
   }
-  
+  // Add locations page if business has multiple locations
+  if (businessInfo.locations && businessInfo.locations.length > 1) {
+    const locationsHtml = generateTailwindLocationsPage(businessInfo, websiteContent, images, colorScheme, typography, heroImage);
+    pages.push(locationsHtml);
+  }
+  console.log(`${logPrefix} Generated ${pages.length} Tailwind pages successfully`);
+  return pages;
+}
+// Function to generate separate HTML pages
+async function generateSeparatePages(businessInfo, websiteContent, images) {
+  const logPrefix = `[generate-website:${businessInfo.projectId}]`;
+  const pages = [];
+  // Generate main pages
+  for (const page of websiteContent.pages){
+    console.log(`${logPrefix} Generating ${page.name} page...`);
+    const pageHtml = await generatePageHTML(businessInfo, page, websiteContent, images);
+    pages.push({
+      name: page.name,
+      title: page.title,
+      html: pageHtml,
+      url: `/${page.name === 'home' ? '' : page.name}`
+    });
+  }
   // Generate location-specific pages if locations exist
   if (businessInfo.locations && businessInfo.locations.length > 0) {
     console.log(`${logPrefix} Generating ${businessInfo.locations.length} location-specific pages...`);
     console.log(`${logPrefix} Locations data:`, JSON.stringify(businessInfo.locations, null, 2));
-    
-    for (const location of businessInfo.locations) {
+    for (const location of businessInfo.locations){
       try {
         console.log(`${logPrefix} Generating page for location: ${location.name}`);
         const locationPage = await generateLocationPage(businessInfo, location, websiteContent, images);
@@ -1753,7 +1581,6 @@ async function generateSeparatePages(businessInfo: BusinessInfo, websiteContent:
         console.error(`${logPrefix} Error generating location page for ${location.name}:`, error);
       }
     }
-    
     // Generate locations directory page
     try {
       console.log(`${logPrefix} Generating locations index page...`);
@@ -1770,27 +1597,122 @@ async function generateSeparatePages(businessInfo: BusinessInfo, websiteContent:
       locationsLength: businessInfo.locations?.length
     });
   }
-  
+  console.log(`${logPrefix} Generated ${pages.length} Tailwind pages successfully`);
   return pages;
 }
+// Function to generate Tailwind locations page
+function generateTailwindLocationsPage(businessInfo, websiteContent, images, colorScheme, typography, heroImage) {
+  const primaryImage = images[0]?.url || heroImage.url;
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${businessInfo.businessName} - All Locations</title>
+    <meta name="description" content="Find ${businessInfo.businessName} locations near you">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+        .container { max-width: 1100px; }
+    </style>
+</head>
+<body class="bg-white text-gray-900">
+    <!-- Navigation -->
+    <header class="sticky top-0 bg-white/95 backdrop-blur border-b border-gray-200">
+        <div class="container mx-auto px-6 py-4">
+            <nav class="flex items-center justify-between">
+                <div class="font-bold text-xl text-gray-900">${businessInfo.businessName}</div>
+                <div class="flex items-center gap-6">
+                    <a href="/preview?projectId=${businessInfo.projectId}&page=home" class="text-sm font-medium text-gray-600 hover:text-gray-900">Home</a>
+                    <a href="/preview?projectId=${businessInfo.projectId}&page=about" class="text-sm font-medium text-gray-600 hover:text-gray-900">About</a>
+                    <a href="/preview?projectId=${businessInfo.projectId}&page=services" class="text-sm font-medium text-gray-600 hover:text-gray-900">Services</a>
+                    <a href="/preview?projectId=${businessInfo.projectId}&page=contact" class="text-sm font-medium text-gray-600 hover:text-gray-900">Contact</a>
+                    <a href="/preview?projectId=${businessInfo.projectId}&page=locations" class="text-sm font-medium text-gray-900">Locations</a>
+                </div>
+            </nav>
+        </div>
+    </header>
+    
+    <!-- Locations Content -->
+    <main>
+        <section class="py-20">
+            <div class="container mx-auto px-6">
+                <div class="max-w-4xl mx-auto">
+                    <h1 class="text-4xl font-bold text-center text-gray-900 mb-12">Our Locations</h1>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        ${(businessInfo.locations || []).map((location)=>`
+                            <div class="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                                <h3 class="text-xl font-semibold text-gray-900 mb-3">${location.name || location}</h3>
+                                <p class="text-gray-600 mb-4">${location.address || 'Contact us for address details'}</p>
+                                <p class="text-gray-600">${location.phone || 'Contact us for phone details'}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
 
-// Function to generate individual page HTML
-async function generatePageHTML(businessInfo: BusinessInfo, page: WebsitePage, websiteContent: WebsiteContent, images: UnsplashImage[]): Promise<string> {
+    <!-- Footer -->
+    <footer class="bg-gray-50 border-t border-gray-200">
+        <div class="container mx-auto px-6 py-10">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div>
+                    <h5 class="font-semibold text-gray-900 mb-3">${businessInfo.businessName}</h5>
+                    <p class="text-gray-600">${websiteContent.brandMessage}</p>
+                </div>
+                <div>
+                    <h5 class="font-semibold text-gray-900 mb-3">Services</h5>
+                    <ul class="space-y-1">
+                        ${(businessInfo.services || []).slice(0, 3).map((service)=>`
+                            <li class="text-gray-600">${service.name || service}</li>
+                        `).join('')}
+                    </ul>
+                </div>
+                <div>
+                    <h5 class="font-semibold text-gray-900 mb-3">Contact</h5>
+                    <p class="text-gray-600">${businessInfo.location || 'Contact us for more information'}</p>
+                </div>
+            </div>
+            <div class="border-t border-gray-200 mt-8 pt-8 text-center">
+                <p class="text-gray-500">&copy; ${new Date().getFullYear()} ${businessInfo.businessName}. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>`;
+  return {
+    name: 'locations-index',
+    title: `${businessInfo.businessName} - All Locations`,
+    html: html,
+    url: '/locations'
+  };
+}
+// Function to generate individual Tailwind page HTML
+async function generatePageHTML(businessInfo, page, websiteContent, images) {
   const colorScheme = businessInfo.colorScheme || {
     primary: '#0d6efd',
     secondary: '#6c757d',
     accent: '#ffc107',
     background: '#ffffff',
-    text: '#212529'
+    text: '#212529',
+    muted: '#6c757d'
   };
-  
   const typography = businessInfo.typography || {
     headings: 'Roboto',
     body: 'Open Sans'
   };
-  
-  const heroImage = images[0] || { url: 'https://via.placeholder.com/1200x600', alt: 'Hero image' };
-  
+  const heroImage = images[0] || {
+    url: 'https://via.placeholder.com/1200x600',
+    alt: 'Hero image'
+  };
+  // Check if using Tailwind
+  const template = getTemplate(businessInfo.websiteTemplate);
+  const isTailwind = template.useTailwind || (businessInfo.websiteTemplate || '').toLowerCase().includes('tailwind');
+  if (isTailwind) {
+    return generateTailwindPageHTML(businessInfo, page, websiteContent, images, colorScheme, typography, heroImage);
+  }
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1973,7 +1895,7 @@ async function generatePageHTML(businessInfo: BusinessInfo, page: WebsitePage, w
                 <div class="col-md-4">
                     <h5>Services</h5>
                     <ul class="list-unstyled">
-                        ${(businessInfo.services || []).slice(0, 3).map((service: any) => `
+                        ${(businessInfo.services || []).slice(0, 3).map((service)=>`
                             <li>${service.name || service}</li>
                         `).join('')}
                     </ul>
@@ -1992,10 +1914,9 @@ async function generatePageHTML(businessInfo: BusinessInfo, page: WebsitePage, w
 </body>
 </html>`;
 }
-
 // Function to generate page-specific content
-function generatePageContent(page: WebsitePage, businessInfo: BusinessInfo, websiteContent: WebsiteContent): string {
-  switch (page.name) {
+function generatePageContent(page, businessInfo, websiteContent) {
+  switch(page.name){
     case 'home':
       return `
         <section class="hero-section" id="home-section">
@@ -2012,7 +1933,7 @@ function generatePageContent(page: WebsitePage, businessInfo: BusinessInfo, webs
             <div class="container">
                 <h2 class="section-title">Why Choose Us</h2>
                 <div class="row">
-                    ${websiteContent.valuePropositions.map((value, index) => `
+                    ${websiteContent.valuePropositions.map((value, index)=>`
                         <div class="col-md-4">
                             <div class="feature-card">
                                 <div class="text-center mb-3">
@@ -2027,7 +1948,6 @@ function generatePageContent(page: WebsitePage, businessInfo: BusinessInfo, webs
             </div>
         </section>
       `;
-      
     case 'about':
       return `
         <section class="section" style="padding-top: 120px;" id="about-section">
@@ -2037,7 +1957,7 @@ function generatePageContent(page: WebsitePage, businessInfo: BusinessInfo, webs
                         <h1>${page.title}</h1>
                         <p class="lead">Learn more about our story and mission.</p>
                         <div class="mt-4">
-                            ${page.sections.map(section => `
+                            ${page.sections.map((section)=>`
                                 <h3>${section.title}</h3>
                                 <p>${section.content}</p>
                             `).join('')}
@@ -2050,14 +1970,13 @@ function generatePageContent(page: WebsitePage, businessInfo: BusinessInfo, webs
             </div>
         </section>
       `;
-      
     case 'services':
       return `
         <section class="section" style="padding-top: 120px;" id="services-section">
             <div class="container">
                 <h1 class="section-title">Our Services</h1>
                 <div class="row">
-                    ${page.sections.map(section => `
+                    ${page.sections.map((section)=>`
                         <div class="col-md-6 mb-4">
                             <div class="feature-card">
                                 <h4>${section.title}</h4>
@@ -2070,7 +1989,6 @@ function generatePageContent(page: WebsitePage, businessInfo: BusinessInfo, webs
             </div>
         </section>
       `;
-      
     case 'contact':
       return `
         <section class="section" style="padding-top: 120px;" id="contact-section">
@@ -2106,7 +2024,6 @@ function generatePageContent(page: WebsitePage, businessInfo: BusinessInfo, webs
             </div>
         </section>
       `;
-      
     default:
       return `
         <section class="section" style="padding-top: 120px;">
@@ -2118,13 +2035,11 @@ function generatePageContent(page: WebsitePage, businessInfo: BusinessInfo, webs
       `;
   }
 }
-
 // Function to generate location-specific page
-async function generateLocationPage(businessInfo: BusinessInfo, location: LocationItem, websiteContent: WebsiteContent, images: UnsplashImage[]): Promise<GeneratedPage> {
+async function generateLocationPage(businessInfo, location, websiteContent, images) {
   const logPrefix = `[generate-website:${businessInfo.projectId}]`;
   console.log(`${logPrefix} Starting location page generation for: ${location.name}`);
   console.log(`${logPrefix} Location data:`, JSON.stringify(location, null, 2));
-  
   const colorScheme = businessInfo.colorScheme || {
     primary: '#0d6efd',
     secondary: '#6c757d',
@@ -2132,35 +2047,34 @@ async function generateLocationPage(businessInfo: BusinessInfo, location: Locati
     background: '#ffffff',
     text: '#212529'
   };
-  
   const typography = businessInfo.typography || {
     headings: 'Roboto',
     body: 'Open Sans'
   };
-  
-  const heroImage = images[0] || { url: 'https://via.placeholder.com/1200x600', alt: 'Location image' };
-  
+  const heroImage = images[0] || {
+    url: 'https://via.placeholder.com/1200x600',
+    alt: 'Location image'
+  };
   const locationSlug = location.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
   console.log(`${logPrefix} Generated location slug: ${locationSlug}`);
-  
   // Safe access to location properties with fallbacks
   const locationCity = location.city || '';
   const locationState = location.state || '';
   const locationServices = location.services || [];
-  const locationMetadata = location.metadata || { description: '', localAreaKeywords: [] };
-  
+  const locationMetadata = location.metadata || {
+    description: '',
+    localAreaKeywords: []
+  };
   const pageTitle = `${businessInfo.businessName} - ${location.name} | ${locationCity}, ${locationState}`;
   const metaDescription = locationMetadata.description || `Visit ${businessInfo.businessName} at our ${location.name} location in ${locationCity}, ${locationState}. ${locationServices.join(', ')}.`;
-  
   const locationKeywords = [
-    ...(Array.isArray(locationMetadata.localAreaKeywords) ? locationMetadata.localAreaKeywords : []),
+    ...Array.isArray(locationMetadata.localAreaKeywords) ? locationMetadata.localAreaKeywords : [],
     `${businessInfo.businessName} ${locationCity}`,
     `${businessInfo.businessType} ${locationCity}`,
-    ...locationServices.map(service => `${service} ${locationCity}`),
+    ...locationServices.map((service)=>`${service} ${locationCity}`),
     `${locationCity} ${businessInfo.businessType}`,
     `${locationState} ${businessInfo.businessType}`
   ];
-
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2194,7 +2108,7 @@ async function generateLocationPage(businessInfo: BusinessInfo, location: Locati
         "@type": "OfferCatalog",
         "name": "Services",
         "itemListElement": [
-          ${location.services.map(service => `{
+          ${location.services.map((service)=>`{
             "@type": "Offer",
             "itemOffered": {
               "@type": "Service",
@@ -2326,7 +2240,7 @@ async function generateLocationPage(businessInfo: BusinessInfo, location: Locati
                         
                         <h4 class="mt-4">Services Available Here</h4>
                         <div class="row">
-                            ${(businessInfo.services || []).map(service => `
+                            ${(businessInfo.services || []).map((service)=>`
                                 <div class="col-md-6 mb-3">
                                     <div class="service-card ${location.services.includes(service.name) ? 'border-success' : ''}">
                                         <h5>
@@ -2378,7 +2292,7 @@ async function generateLocationPage(businessInfo: BusinessInfo, location: Locati
                 </div>
                 <div class="col-md-6">
                     <h5>Other Locations</h5>
-                    ${(businessInfo.locations || []).filter(loc => loc.id !== location.id).slice(0, 3).map(otherLoc => `
+                    ${(businessInfo.locations || []).filter((loc)=>loc.id !== location.id).slice(0, 3).map((otherLoc)=>`
                         <p><a href="/locations/${otherLoc.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}" class="text-light">${otherLoc.name} - ${otherLoc.city}</a></p>
                     `).join('')}
                     <a href="/locations" class="text-light">View All Locations →</a>
@@ -2390,7 +2304,6 @@ async function generateLocationPage(businessInfo: BusinessInfo, location: Locati
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>`;
-
   return {
     name: `location-${locationSlug}`,
     title: pageTitle,
@@ -2398,9 +2311,8 @@ async function generateLocationPage(businessInfo: BusinessInfo, location: Locati
     url: `/locations/${locationSlug}`
   };
 }
-
 // Function to generate locations index page
-async function generateLocationsIndexPage(businessInfo: BusinessInfo, websiteContent: WebsiteContent, images: UnsplashImage[]): Promise<GeneratedPage> {
+async function generateLocationsIndexPage(businessInfo, websiteContent, images) {
   const colorScheme = businessInfo.colorScheme || {
     primary: '#0d6efd',
     secondary: '#6c757d',
@@ -2408,12 +2320,10 @@ async function generateLocationsIndexPage(businessInfo: BusinessInfo, websiteCon
     background: '#ffffff',
     text: '#212529'
   };
-  
   const typography = businessInfo.typography || {
     headings: 'Roboto',
     body: 'Open Sans'
   };
-  
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2507,9 +2417,9 @@ async function generateLocationsIndexPage(businessInfo: BusinessInfo, websiteCon
     <section class="py-5">
         <div class="container">
             <div class="row">
-                ${(businessInfo.locations || []).map(location => {
-                  const locationSlug = location.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
-                  return `
+                ${(businessInfo.locations || []).map((location)=>{
+    const locationSlug = location.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+    return `
                     <div class="col-md-6 col-lg-4">
                         <div class="location-card">
                             <div class="p-4">
@@ -2533,7 +2443,7 @@ async function generateLocationsIndexPage(businessInfo: BusinessInfo, websiteCon
                                 <div class="mb-3">
                                     <small class="text-muted">Services:</small>
                                     <div class="mt-2 d-flex flex-wrap gap-1">
-                                        ${(businessInfo.services || []).map(service => `
+                                        ${(businessInfo.services || []).map((service)=>`
                                             <span class="badge ${location.services.includes(service.name) ? 'bg-success' : 'bg-secondary'} me-1 mb-1">
                                                 ${service.name}
                                             </span>
@@ -2549,7 +2459,7 @@ async function generateLocationsIndexPage(businessInfo: BusinessInfo, websiteCon
                         </div>
                     </div>
                   `;
-                }).join('')}
+  }).join('')}
             </div>
         </div>
     </section>
@@ -2557,11 +2467,196 @@ async function generateLocationsIndexPage(businessInfo: BusinessInfo, websiteCon
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>`;
-
   return {
     name: 'locations-index',
     title: `${businessInfo.businessName} - All Locations`,
     html: html,
     url: '/locations'
   };
+}
+// Function to generate individual Tailwind page HTML
+function generateTailwindPageHTML(businessInfo, page, websiteContent, images, colorScheme, typography, heroImage) {
+  const primaryImage = images[0]?.url || heroImage.url;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${page.title}</title>
+    <meta name="description" content="${businessInfo.description}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+        .container { max-width: 1100px; }
+    </style>
+</head>
+<body class="bg-white text-gray-900">
+    <!-- Navigation -->
+    <header class="sticky top-0 bg-white/95 backdrop-blur border-b border-gray-200">
+        <div class="container mx-auto px-6 py-4">
+            <nav class="flex items-center justify-between">
+                <div class="font-bold text-xl text-gray-900">${businessInfo.businessName}</div>
+                <div class="flex items-center gap-6">
+                    <a href="/preview?projectId=${businessInfo.projectId}&page=home" class="text-sm font-medium text-gray-600 hover:text-gray-900 ${page.name === 'home' ? 'text-gray-900' : ''}">Home</a>
+                    <a href="/preview?projectId=${businessInfo.projectId}&page=about" class="text-sm font-medium text-gray-600 hover:text-gray-900 ${page.name === 'about' ? 'text-gray-900' : ''}">About</a>
+                    <a href="/preview?projectId=${businessInfo.projectId}&page=services" class="text-sm font-medium text-gray-600 hover:text-gray-900 ${page.name === 'services' ? 'text-gray-900' : ''}">Services</a>
+                    <a href="/preview?projectId=${businessInfo.projectId}&page=contact" class="text-sm font-medium text-gray-600 hover:text-gray-900 ${page.name === 'contact' ? 'text-gray-900' : ''}">Contact</a>
+                </div>
+            </nav>
+        </div>
+    </header>
+    
+    <!-- Page Content -->
+    <main>
+        ${generateTailwindPageContent(page, businessInfo, websiteContent, primaryImage)}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-50 border-t border-gray-200">
+        <div class="container mx-auto px-6 py-10">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div>
+                    <h5 class="font-semibold text-gray-900 mb-3">${businessInfo.businessName}</h5>
+                    <p class="text-gray-600">${websiteContent.brandMessage}</p>
+                </div>
+                <div>
+                    <h5 class="font-semibold text-gray-900 mb-3">Services</h5>
+                    <ul class="space-y-1">
+                        ${(businessInfo.services || []).slice(0, 3).map((service)=>`
+                            <li class="text-gray-600">${service.name || service}</li>
+                        `).join('')}
+                    </ul>
+                </div>
+                <div>
+                    <h5 class="font-semibold text-gray-900 mb-3">Contact</h5>
+                    <p class="text-gray-600">${businessInfo.location || 'Contact us for more information'}</p>
+                </div>
+            </div>
+            <div class="border-t border-gray-200 mt-8 pt-8 text-center">
+                <p class="text-gray-500">&copy; ${new Date().getFullYear()} ${businessInfo.businessName}. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>`;
+}
+// Function to generate Tailwind page-specific content
+function generateTailwindPageContent(page, businessInfo, websiteContent, primaryImage) {
+  switch(page.name){
+    case 'home':
+      return `
+        <section class="relative overflow-hidden bg-gradient-to-br from-blue-50 to-white">
+            <div class="container mx-auto px-6 py-20">
+                <div class="max-w-4xl">
+                    <h1 class="text-4xl md:text-6xl font-bold text-gray-900 mb-6">${page.sections[0]?.title || `Welcome to ${businessInfo.businessName}`}</h1>
+                    <p class="text-xl text-gray-600 mb-8 max-w-2xl">${page.sections[0]?.content || businessInfo.description}</p>
+                    <a href="/preview?projectId=${businessInfo.projectId}&page=contact" class="inline-flex items-center px-6 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors">${page.sections[0]?.callToAction || 'Get Started'}</a>
+                </div>
+            </div>
+        </section>
+        
+        <section class="py-16">
+            <div class="container mx-auto px-6">
+                <h2 class="text-3xl font-bold text-center text-gray-900 mb-12">Why Choose Us</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                    ${websiteContent.valuePropositions.map((value, index)=>`
+                        <div class="text-center">
+                            <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <div class="w-8 h-8 bg-blue-600 rounded"></div>
+                            </div>
+                            <h4 class="text-lg font-semibold text-gray-900 mb-2">${value}</h4>
+                            <p class="text-gray-600">Professional service that exceeds expectations.</p>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </section>
+      `;
+    case 'about':
+      return `
+        <section class="py-20">
+            <div class="container mx-auto px-6">
+                <div class="max-w-4xl mx-auto">
+                    <h1 class="text-4xl font-bold text-gray-900 mb-6">${page.title.split(' - ')[0]}</h1>
+                    <p class="text-xl text-gray-600 mb-8">Learn more about our story and mission.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+                        <div>
+                            ${page.sections.map((section)=>`
+                                <h3 class="text-2xl font-semibold text-gray-900 mb-4">${section.title}</h3>
+                                <p class="text-gray-600 mb-6">${section.content}</p>
+                            `).join('')}
+                        </div>
+                        <div>
+                            <img src="${primaryImage}" class="w-full rounded-lg shadow-lg" alt="About us">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+      `;
+    case 'services':
+      return `
+        <section class="py-20">
+            <div class="container mx-auto px-6">
+                <div class="max-w-4xl mx-auto">
+                    <h1 class="text-4xl font-bold text-center text-gray-900 mb-12">Our Services</h1>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        ${page.sections.map((section)=>`
+                            <div class="bg-white border border-gray-200 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
+                                <h4 class="text-xl font-semibold text-gray-900 mb-3">${section.title}</h4>
+                                <p class="text-gray-600 mb-4">${section.content}</p>
+                                <a href="/preview?projectId=${businessInfo.projectId}&page=contact" class="inline-flex items-center text-blue-600 font-medium hover:text-blue-700">${section.callToAction || 'Learn More'} →</a>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        </section>
+      `;
+    case 'contact':
+      return `
+        <section class="py-20">
+            <div class="container mx-auto px-6">
+                <div class="max-w-2xl mx-auto">
+                    <h1 class="text-4xl font-bold text-center text-gray-900 mb-6">Contact Us</h1>
+                    <p class="text-xl text-gray-600 text-center mb-12">Ready to get started? Contact us today for professional ${businessInfo.businessType} services.</p>
+                    
+                    <div class="bg-white border border-gray-200 rounded-lg p-8 shadow-sm">
+                        <form class="space-y-6">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label for="name" class="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                                    <input type="text" id="name" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                                </div>
+                                <div>
+                                    <label for="email" class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                                    <input type="email" id="email" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                                </div>
+                            </div>
+                            <div>
+                                <label for="subject" class="block text-sm font-medium text-gray-700 mb-2">Subject</label>
+                                <input type="text" id="subject" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                            </div>
+                            <div>
+                                <label for="message" class="block text-sm font-medium text-gray-700 mb-2">Message</label>
+                                <textarea id="message" rows="5" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required></textarea>
+                            </div>
+                            <button type="submit" class="w-full px-6 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 transition-colors">Send Message</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+      `;
+    default:
+      return `
+        <section class="py-20">
+            <div class="container mx-auto px-6">
+                <h1 class="text-4xl font-bold text-gray-900 mb-6">${page.title}</h1>
+                <p class="text-gray-600">Content for ${page.name} page.</p>
+            </div>
+        </section>
+      `;
+  }
 }

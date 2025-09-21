@@ -89,10 +89,13 @@ export const GenerationProgress = ({ isGenerating, onComplete, projectId }: Gene
             'location_metadata': 1, // Map to content stage
             'image_generation': 1,  // Map to content stage  
             'page_generation': 2,   // Map to design stage
-            'code_generation': 2,   // Map to design stage
-            'finalization': 3,      // Map to optimization stage
+            'code_generation': 3,   // Map to optimization stage
+            'finalization': 4,      // Map to deployment stage
             'completed': 4
           };
+          
+          // Add detailed logging to help debug
+          console.log(`Progress update: stage=${stage}, percentage=${progress_percentage}, mapped index=${stageMap[stage] || 0}`);
 
           const currentIndex = stageMap[stage] || 0;
           setCurrentStageIndex(currentIndex);
@@ -113,7 +116,32 @@ export const GenerationProgress = ({ isGenerating, onComplete, projectId }: Gene
 
           // Check if completed
           if (stage === 'completed' || progress_percentage === 100) {
+            // Mark all stages as completed
+            setStages(prev => prev.map(stageItem => ({ ...stageItem, status: "completed" as const, progress: 100 })));
             setTimeout(() => onComplete?.(), 1000);
+          }
+          
+          // Handle potential stuck states
+          if ((stage === 'page_generation' || stage === 'code_generation') && progress_percentage >= 80) {
+            // If we're at high percentage in these stages but not moving, ensure the UI shows progress
+            const currentStageIndex = stageMap[stage] || 0;
+            const nextStageIndex = currentStageIndex + 1;
+            
+            // Update the next stage to show some progress
+            if (nextStageIndex < stages.length) {
+              setStages(prev => {
+                const newStages = [...prev];
+                // Mark current stage as almost complete
+                if (newStages[currentStageIndex]) {
+                  newStages[currentStageIndex] = { ...newStages[currentStageIndex], progress: 95 };
+                }
+                // Show some progress on next stage
+                if (newStages[nextStageIndex]) {
+                  newStages[nextStageIndex] = { ...newStages[nextStageIndex], status: "active" as const, progress: 10 };
+                }
+                return newStages;
+              });
+            }
           }
         }
       } catch (error) {
@@ -128,7 +156,7 @@ export const GenerationProgress = ({ isGenerating, onComplete, projectId }: Gene
     const interval = setInterval(pollProgress, 2000);
 
     return () => clearInterval(interval);
-  }, [isGenerating, projectId, onComplete]);
+  }, [isGenerating, projectId, onComplete, stages.length]);
 
   // Simulate generation progress (fallback if no projectId)
   useEffect(() => {
@@ -175,7 +203,7 @@ export const GenerationProgress = ({ isGenerating, onComplete, projectId }: Gene
     };
 
     return simulateProgress();
-  }, [isGenerating, onComplete, projectId]);
+  }, [isGenerating, onComplete, projectId, stages.length]);
 
   const getStageIcon = (stage: GenerationStage) => {
     const IconComponent = stage.icon;

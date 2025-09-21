@@ -10,7 +10,7 @@ const PreviewWebsite = () => {
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get('projectId');
   const page = searchParams.get('page') || 'home';
-  const { user } = useAuth();
+  const { user, loading: authLoading, isLocalMode } = useAuth();
   const navigate = useNavigate();
   
   const [loading, setLoading] = useState(true);
@@ -39,6 +39,11 @@ const PreviewWebsite = () => {
       setLoading(false);
       return;
     }
+    // Wait for auth to resolve to avoid false negatives on owner access
+    if (authLoading) {
+      setLoading(true);
+      return;
+    }
 
     const fetchWebsiteContent = async () => {
       try {
@@ -46,20 +51,43 @@ const PreviewWebsite = () => {
         setError(null);
 
         // Fetch project minimal fields for access control
-        const { data: projectData, error: projectError } = await supabase
-          .from('website_projects')
-          .select('business_name, business_type, description, user_id, is_public')
-          .eq('id', projectId)
-          .single();
+        let isPublic: boolean | null = null;
+        let projectData: any = null;
+        let projectError: any = null;
+        
+        // First, try selecting with is_public (newer schema)
+        {
+          const { data, error } = await supabase
+            .from('website_projects')
+            .select('id, business_name, business_type, description, user_id, is_public')
+            .eq('id', projectId)
+            .maybeSingle();
+          projectData = data;
+          projectError = error;
+        }
+        
+        // If the query failed because is_public doesn't exist, retry without it (older schema)
+        if ((projectError && typeof projectError.message === 'string' && projectError.message.includes("is_public")) || (!projectData && !projectError)) {
+          const { data, error } = await supabase
+            .from('website_projects')
+            .select('id, business_name, business_type, description, user_id')
+            .eq('id', projectId)
+            .maybeSingle();
+          projectData = data;
+          projectError = error;
+          isPublic = false; // default to private when flag is unavailable
+        } else if (projectData && typeof (projectData as any).is_public !== 'undefined') {
+          isPublic = !!(projectData as any).is_public;
+        }
 
         if (projectError || !projectData) {
           throw new Error('Project not found');
         }
 
-        // Access control: allow if owner or project is public
+        // Access control: allow if owner, project is public, or local mode override
         const isOwner = !!user && projectData.user_id === user.id;
-        const isPublic = !!projectData.is_public;
-        if (!isOwner && !isPublic) {
+        const allowPublic = isPublic === null ? false : !!isPublic;
+        if (!isOwner && !allowPublic && !isLocalMode) {
           throw new Error('This project is private. Sign in as the owner to view it.');
         }
 
@@ -94,7 +122,7 @@ const PreviewWebsite = () => {
     };
 
     fetchWebsiteContent();
-  }, [projectId, user]);
+  }, [projectId, user, authLoading, isLocalMode]);
 
   // Extract page content from metadata if available
   const getPageContent = () => {

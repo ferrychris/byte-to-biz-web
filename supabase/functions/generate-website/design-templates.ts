@@ -2,6 +2,7 @@
 // Includes Lucide icons integration for professional appearance
 
 export interface DesignTemplate {
+  useTailwind?: boolean;
   name: string;
   colorScheme: {
     primary: string;
@@ -155,14 +156,35 @@ export const professionalTemplate: DesignTemplate = {
 };
 
 export function getTemplate(templateName?: string): DesignTemplate {
+  // If templateName contains 'tailwind', return modernTemplate with tailwind flag
+  if (templateName?.toLowerCase().includes('tailwind')) {
+    return {
+      ...modernTemplate,
+      useTailwind: true
+    };
+  }
+
+  // Default to tailwind if no template specified
+  if (!templateName) {
+    return {
+      ...modernTemplate,
+      useTailwind: true
+    };
+  }
+
   switch (templateName) {
     case 'modern':
       return modernTemplate;
     case 'professional':
       return professionalTemplate;
     case 'classic':
-    default:
       return classicTemplate;
+    default:
+      // Default to tailwind-based modern template
+      return {
+        ...modernTemplate,
+        useTailwind: true
+      };
   }
 }
 
