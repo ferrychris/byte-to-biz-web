@@ -86,8 +86,11 @@ export const GenerationProgress = ({ isGenerating, onComplete, projectId }: Gene
           const stageMap: { [key: string]: number } = {
             'planning': 0,
             'content_generation': 1,
-            'code_generation': 2,
-            'finalization': 3,
+            'location_metadata': 1, // Map to content stage
+            'image_generation': 1,  // Map to content stage  
+            'page_generation': 2,   // Map to design stage
+            'code_generation': 2,   // Map to design stage
+            'finalization': 3,      // Map to optimization stage
             'completed': 4
           };
 

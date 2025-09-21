@@ -340,7 +340,8 @@ serve(async (req) => {
 
 async function generateContentWithGPT5(businessInfo: BusinessInfo): Promise<WebsiteContent> {
   const logPrefix = `[generate-website:${businessInfo.projectId}]`;
-  console.log(`${logPrefix} Generating content with GPT-4o...`);
+  const openAIModel = Deno.env.get('OPENAI_MODEL') || 'gpt-4o';
+  console.log(`${logPrefix} Generating content with OpenAI model: ${openAIModel}...`);
   
   const prompt = `You are an expert web designer and copywriter. Create compelling, professional website content for a ${businessInfo.businessType} business.
 
@@ -462,7 +463,7 @@ IMPORTANT: Return ONLY valid JSON with no markdown formatting, code fences, or a
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: openAIModel,
         messages: [
           {
             role: 'system',
@@ -625,7 +626,7 @@ async function fetchUnsplashImages(businessInfo: BusinessInfo): Promise<Unsplash
 
 async function generateEnhancedWebsite(
   businessInfo: BusinessInfo,
-  content: WebsiteContent,
+  websiteContent: WebsiteContent,
   images: UnsplashImage[]
 ): Promise<{ html: string; css: string; js: string }> {
   const logPrefix = `[generate-website:${businessInfo.projectId}]`;
@@ -672,7 +673,7 @@ async function generateEnhancedWebsite(
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                    ${content.pages.map(page => `
+                    ${websiteContent.pages.map(page => `
                         <li class="nav-item">
                             <a class="nav-link" href="#${page.name}">${page.title}</a>
                         </li>
@@ -769,7 +770,7 @@ async function generateEnhancedWebsite(
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                    ${content.pages.map(page => {
+                    ${websiteContent.pages.map(page => {
                         const pageName = page.name === 'home' ? 'Home' : 
                                        page.name === 'about' ? 'About' :
                                        page.name === 'services' ? 'Services' :

@@ -181,6 +181,12 @@ const Index = () => {
           description: `Professional website for ${data.businessName}, a ${data.businessType} business`
         });
         setCurrentState("completed");
+        
+        // Automatically open the live preview in a new tab
+        setTimeout(() => {
+          const previewUrl = `${window.location.origin}${response.previewUrl}`;
+          window.open(previewUrl, '_blank', 'noopener,noreferrer');
+        }, 1000); // Small delay to ensure UI updates first
       } else {
         setCurrentState("error");
       }
