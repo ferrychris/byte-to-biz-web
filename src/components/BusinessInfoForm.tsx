@@ -6,6 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sparkles, Building2, MapPin } from "lucide-react";
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 
 interface BusinessInfo {
   businessName: string;
@@ -13,6 +15,7 @@ interface BusinessInfo {
   description: string;
   location: string;
   contactEmail: string;
+  projectId: string;
 }
 
 interface BusinessInfoFormProps {
@@ -38,7 +41,8 @@ const businessTypes = [
 ];
 
 export const BusinessInfoForm = ({ onSubmit, isLoading = false }: BusinessInfoFormProps) => {
-  const [formData, setFormData] = useState<BusinessInfo>({
+  const { user } = useAuth();
+  const [formData, setFormData] = useState({
     businessName: "",
     businessType: "",
     description: "",
@@ -75,14 +79,35 @@ export const BusinessInfoForm = ({ onSubmit, isLoading = false }: BusinessInfoFo
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (validateForm()) {
-      onSubmit(formData);
+    if (!validateForm() || !user) return;
+    
+    try {
+      // Create project in database
+      const { data: project, error } = await supabase
+        .from('website_projects')
+        .insert({
+          user_id: user.id,
+          business_name: formData.businessName,
+          business_type: formData.businessType,
+          description: formData.description,
+          target_audience: formData.contactEmail, // Store contact email as target audience for now
+          location: formData.location,
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      onSubmit({ ...formData, projectId: project.id });
+    } catch (error) {
+      console.error('Error creating project:', error);
     }
   };
 
-  const updateField = (field: keyof BusinessInfo, value: string) => {
+  const updateField = (field: keyof typeof formData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: undefined }));

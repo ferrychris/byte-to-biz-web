@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Zap, Globe, Rocket, ArrowRight, CheckCircle } from "lucide-react";
+import { Sparkles, Zap, Globe, Rocket, ArrowRight, CheckCircle, LogOut } from "lucide-react";
 import { BusinessInfoForm } from "@/components/BusinessInfoForm";
 import { GenerationProgress } from "@/components/GenerationProgress";
 import { WebsitePreview } from "@/components/WebsitePreview";
+import { AuthForm } from "@/components/AuthForm";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 
 interface BusinessInfo {
   businessName: string;
@@ -11,26 +14,57 @@ interface BusinessInfo {
   description: string;
   location: string;
   contactEmail: string;
+  projectId: string;
 }
 
-type AppState = "landing" | "form" | "generating" | "preview";
+type AppState = "auth" | "landing" | "form" | "generating" | "preview";
 
 const Index = () => {
-  const [currentState, setCurrentState] = useState<AppState>("landing");
+  const { user, loading: authLoading, signOut } = useAuth();
+  const [currentState, setCurrentState] = useState<AppState>("auth");
   const [businessInfo, setBusinessInfo] = useState<BusinessInfo | null>(null);
   const [generatedWebsite, setGeneratedWebsite] = useState({
     url: "https://acme-coffee-shop.netlify.app",
     title: "Acme Coffee Shop - Premium Coffee Experience",
     description: "Professional website generated with AI"
   });
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const handleGetStarted = () => {
     setCurrentState("form");
   };
 
-  const handleFormSubmit = (data: BusinessInfo) => {
+  const handleFormSubmit = async (data: BusinessInfo) => {
     setBusinessInfo(data);
     setCurrentState("generating");
+    setIsGenerating(true);
+    
+    try {
+      const { data: response, error } = await supabase.functions.invoke('generate-website', {
+        body: {
+          projectId: data.projectId,
+          businessName: data.businessName,
+          businessType: data.businessType,
+          description: data.description,
+          targetAudience: data.contactEmail,
+          location: data.location
+        }
+      });
+
+      if (error) throw error;
+
+      setGeneratedWebsite({
+        url: "https://generated-website.netlify.app",
+        title: `${data.businessName} - Professional Website`,
+        description: "Generated with AI"
+      });
+      
+      setCurrentState("preview");
+    } catch (error) {
+      console.error('Error generating website:', error);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleGenerationComplete = () => {
@@ -41,6 +75,24 @@ const Index = () => {
     setCurrentState("landing");
     setBusinessInfo(null);
   };
+
+  const handleAuthSuccess = () => {
+    setCurrentState("landing");
+  };
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  // Show auth form if user is not authenticated
+  if (!user) {
+    return <AuthForm onAuthSuccess={handleAuthSuccess} />;
+  }
 
   const features = [
     {
@@ -87,6 +139,7 @@ const Index = () => {
           </div>
           <BusinessInfoForm
             onSubmit={handleFormSubmit}
+            isLoading={isGenerating}
           />
         </div>
       </div>
@@ -98,8 +151,9 @@ const Index = () => {
       <div className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-12">
           <GenerationProgress
-            isGenerating={true}
+            isGenerating={isGenerating}
             onComplete={handleGenerationComplete}
+            projectId={businessInfo?.projectId}
           />
         </div>
       </div>
@@ -149,13 +203,19 @@ const Index = () => {
               </div>
               <span className="text-xl font-bold gradient-text">WebGenAI</span>
             </div>
-            <Button
-              onClick={handleGetStarted}
-              className="bg-gradient-primary hover:opacity-90 text-primary-foreground glow-primary transition-smooth"
-            >
-              Get Started
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground">
+                Welcome, {user?.email}
+              </span>
+              <Button
+                onClick={signOut}
+                variant="outline"
+                size="sm"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Sign Out
+              </Button>
+            </div>
           </div>
         </div>
       </header>

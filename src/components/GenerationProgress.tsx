@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, Circle, Loader2, Sparkles, Code, Palette, Globe, Rocket } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface GenerationStage {
   id: string;
@@ -16,6 +17,7 @@ interface GenerationStage {
 interface GenerationProgressProps {
   isGenerating: boolean;
   onComplete?: () => void;
+  projectId?: string;
 }
 
 const initialStages: GenerationStage[] = [
@@ -61,14 +63,73 @@ const initialStages: GenerationStage[] = [
   },
 ];
 
-export const GenerationProgress = ({ isGenerating, onComplete }: GenerationProgressProps) => {
+export const GenerationProgress = ({ isGenerating, onComplete, projectId }: GenerationProgressProps) => {
   const [stages, setStages] = useState<GenerationStage[]>(initialStages);
   const [currentStageIndex, setCurrentStageIndex] = useState(0);
   const [overallProgress, setOverallProgress] = useState(0);
 
-  // Simulate generation progress
+  // Real-time progress tracking
   useEffect(() => {
-    if (!isGenerating) return;
+    if (!isGenerating || !projectId) return;
+
+    const pollProgress = async () => {
+      try {
+        const { data } = await supabase.functions.invoke('get-progress', {
+          body: { projectId }
+        });
+
+        if (data?.progress) {
+          const { stage, progress_percentage } = data.progress;
+          setOverallProgress(progress_percentage);
+
+          // Update stages based on current stage
+          const stageMap: { [key: string]: number } = {
+            'planning': 0,
+            'content_generation': 1,
+            'code_generation': 2,
+            'finalization': 3,
+            'completed': 4
+          };
+
+          const currentIndex = stageMap[stage] || 0;
+          setCurrentStageIndex(currentIndex);
+
+          setStages(prev => prev.map((stageItem, index) => {
+            if (index < currentIndex) {
+              return { ...stageItem, status: "completed" as const, progress: 100 };
+            } else if (index === currentIndex) {
+              return { 
+                ...stageItem, 
+                status: stage === 'completed' ? "completed" as const : "active" as const, 
+                progress: progress_percentage 
+              };
+            } else {
+              return { ...stageItem, status: "pending" as const, progress: 0 };
+            }
+          }));
+
+          // Check if completed
+          if (stage === 'completed' || progress_percentage === 100) {
+            setTimeout(() => onComplete?.(), 1000);
+          }
+        }
+      } catch (error) {
+        console.error('Error polling progress:', error);
+      }
+    };
+
+    // Initial poll
+    pollProgress();
+
+    // Poll every 2 seconds
+    const interval = setInterval(pollProgress, 2000);
+
+    return () => clearInterval(interval);
+  }, [isGenerating, projectId, onComplete]);
+
+  // Simulate generation progress (fallback if no projectId)
+  useEffect(() => {
+    if (!isGenerating || projectId) return;
 
     const simulateProgress = () => {
       const totalStages = stages.length;
@@ -111,7 +172,7 @@ export const GenerationProgress = ({ isGenerating, onComplete }: GenerationProgr
     };
 
     return simulateProgress();
-  }, [isGenerating, onComplete]);
+  }, [isGenerating, onComplete, projectId]);
 
   const getStageIcon = (stage: GenerationStage) => {
     const IconComponent = stage.icon;
