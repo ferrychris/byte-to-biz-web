@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Globe, Clock, CheckCircle, AlertCircle, ExternalLink, Trash2, Eye } from "lucide-react";
+import { Globe, Clock, CheckCircle, AlertCircle, ExternalLink, Trash2, Eye, Info } from "lucide-react";
 
 interface Project {
   id: string;
@@ -29,13 +30,7 @@ export const ProjectsList = ({ onProjectSelect, onCreateNew }: ProjectsListProps
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (user) {
-      fetchProjects();
-    }
-  }, [user]);
-
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -55,7 +50,13 @@ export const ProjectsList = ({ onProjectSelect, onCreateNew }: ProjectsListProps
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchProjects();
+    }
+  }, [user, fetchProjects]);
 
   const getStatusIcon = (status: Project['status']) => {
     switch (status) {
@@ -188,13 +189,25 @@ export const ProjectsList = ({ onProjectSelect, onCreateNew }: ProjectsListProps
         {projects.map((project) => (
           <Card 
             key={project.id} 
-            className="cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => onProjectSelect?.(project)}
+            className="hover:shadow-md transition-shadow"
           >
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <CardTitle className="text-lg mb-1">{project.business_name}</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-lg mb-1">{project.business_name}</CardTitle>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                      className="h-7 px-2 py-1"
+                    >
+                      <Link to={`/projects/${project.id}`}>
+                        <Info className="w-3 h-3 mr-1" />
+                        View Details
+                      </Link>
+                    </Button>
+                  </div>
                   <CardDescription className="text-sm">
                     {project.business_type} • {project.location}
                   </CardDescription>

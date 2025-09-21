@@ -6,17 +6,17 @@
 
 @layer base {
   :root {
-    /* Core Background & Foreground */
-    --background: 220 15% 7%;
-    --foreground: 220 10% 95%;
+    /* Core Background & Foreground (Light Mode) */
+    --background: 0 0% 100%; /* white */
+    --foreground: 222.2 84% 4.9%; /* near-black */
 
     /* Card System */
-    --card: 220 15% 9%;
-    --card-foreground: 220 10% 95%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
 
     /* Popover System */
-    --popover: 220 15% 8%;
-    --popover-foreground: 220 10% 95%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
 
     /* Primary Brand Colors - Tech Blue/Purple */
     --primary: 240 100% 65%;
@@ -24,17 +24,17 @@
     --primary-glow: 240 100% 75%;
     --primary-muted: 240 50% 40%;
 
-    /* Secondary Colors - Elegant Gray */
-    --secondary: 220 15% 12%;
-    --secondary-foreground: 220 10% 95%;
+    /* Secondary Colors - Light Gray */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
 
     /* Muted Colors */
-    --muted: 220 15% 15%;
-    --muted-foreground: 220 10% 65%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 20.2% 35.1%;
 
-    /* Accent Colors - Electric Purple */
-    --accent: 280 100% 65%;
-    --accent-foreground: 220 10% 98%;
+    /* Accent Colors */
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 47.4% 11.2%;
     --accent-glow: 280 100% 75%;
 
     /* Status Colors */
@@ -46,8 +46,8 @@
     --destructive-foreground: 220 10% 98%;
 
     /* Border & Input */
-    --border: 220 15% 18%;
-    --input: 220 15% 15%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
     --ring: 240 100% 65%;
 
     /* Design System Radius */
@@ -56,8 +56,9 @@
     /* Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(240 100% 65%), hsl(280 100% 65%));
     --gradient-hero: linear-gradient(135deg, hsl(240 100% 65%), hsl(280 100% 65%), hsl(320 100% 65%));
-    --gradient-subtle: linear-gradient(180deg, hsl(220 15% 8%), hsl(220 15% 12%));
-    --gradient-card: linear-gradient(135deg, hsl(220 15% 9%), hsl(220 15% 11%));
+    /* Light subtle/background gradients */
+    --gradient-subtle: linear-gradient(180deg, hsl(0 0% 100%), hsl(210 40% 98%));
+    --gradient-card: linear-gradient(135deg, hsl(0 0% 100%), hsl(210 40% 97%));
 
     /* Shadows */
     --shadow-glow: 0 0 40px hsl(240 100% 65% / 0.3);
@@ -124,6 +125,10 @@
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Restore dark gradients (override light defaults) */
+    --gradient-subtle: linear-gradient(180deg, hsl(220 15% 8%), hsl(220 15% 12%));
+    --gradient-card: linear-gradient(135deg, hsl(220 15% 9%), hsl(220 15% 11%));
   }
 }
 
@@ -134,8 +139,12 @@
 
   body {
     @apply bg-background text-foreground font-sans;
-    background: radial-gradient(ellipse at top, hsl(220 15% 10%), hsl(220 15% 7%));
     min-height: 100vh;
+  }
+
+  /* Apply the radial gradient only in dark mode */
+  .dark body {
+    background: radial-gradient(ellipse at top, hsl(220 15% 10%), hsl(220 15% 7%));
   }
 
   /* Custom scrollbar */

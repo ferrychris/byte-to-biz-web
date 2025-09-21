@@ -45,15 +45,22 @@ const PreviewWebsite = () => {
         setLoading(true);
         setError(null);
 
-        // Check if user has access to this project
+        // Fetch project minimal fields for access control
         const { data: projectData, error: projectError } = await supabase
           .from('website_projects')
-          .select('business_name, business_type, description')
+          .select('business_name, business_type, description, user_id, is_public')
           .eq('id', projectId)
           .single();
 
-        if (projectError) {
-          throw new Error('Project not found or you do not have access to it');
+        if (projectError || !projectData) {
+          throw new Error('Project not found');
+        }
+
+        // Access control: allow if owner or project is public
+        const isOwner = !!user && projectData.user_id === user.id;
+        const isPublic = !!projectData.is_public;
+        if (!isOwner && !isPublic) {
+          throw new Error('This project is private. Sign in as the owner to view it.');
         }
 
         // Get the generated website content
@@ -72,7 +79,11 @@ const PreviewWebsite = () => {
           css: websiteData.css_content || '',
           js: websiteData.js_content || '',
           metadata: websiteData.metadata || null,
-          projectDetails: projectData
+          projectDetails: {
+            business_name: projectData.business_name,
+            business_type: projectData.business_type,
+            description: projectData.description,
+          }
         });
       } catch (err: any) {
         console.error('Error fetching website content:', err);
@@ -263,31 +274,44 @@ const PreviewWebsite = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-red-50 p-4">
         <h1 className="text-2xl font-bold text-red-500 mb-4">Error Loading Preview</h1>
-        <p className="text-muted-foreground mb-6">{error}</p>
-        <Button onClick={() => navigate('/')}>Back to Home</Button>
+        <p className="text-gray-600 mb-6">{error}</p>
+        <button 
+          onClick={() => navigate('/')}
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+        >
+          Back to Home
+        </button>
       </div>
     );
   }
 
+  // For full-page preview, render the HTML content directly using dangerouslySetInnerHTML
+  const fullHtml = getFullHtml();
+  
+  // Check if we have complete HTML content
+  if (fullHtml && fullHtml.includes('<!DOCTYPE html>')) {
+    // Render the complete HTML document by replacing the current page
+    return (
+      <div 
+        dangerouslySetInnerHTML={{ __html: fullHtml }}
+        style={{ minHeight: '100vh' }}
+      />
+    );
+  }
+
+  // Fallback for incomplete content
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      <div className="bg-background/80 backdrop-blur-sm border-b border-border/50 sticky top-0 z-50 p-4">
-        <Button variant="outline" size="sm" onClick={() => navigate('/')}>
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Dashboard
-        </Button>
-      </div>
-      
-      <div className="flex-1">
-        <iframe 
-          srcDoc={getFullHtml()}
-          className="w-full h-full border-0"
-          title="Website Preview"
-          sandbox="allow-scripts allow-same-origin"
-        />
-      </div>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
+      <h1 className="text-2xl font-bold text-gray-800 mb-4">Website Preview Not Available</h1>
+      <p className="text-gray-600 mb-6">The website content is not ready for preview yet.</p>
+      <button 
+        onClick={() => navigate('/')}
+        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+      >
+        Back to Home
+      </button>
     </div>
   );
 };

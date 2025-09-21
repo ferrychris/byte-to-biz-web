@@ -1,13 +1,22 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Zap, Globe, Rocket, ArrowRight, CheckCircle, LogOut, FolderOpen } from "lucide-react";
+import { 
+  Sparkles, Zap, Globe, Rocket, ArrowRight, CheckCircle, LogOut, FolderOpen,
+  Plus, Hammer, Moon, Sun, BarChart3, Clock, Activity, RefreshCcw, Settings, Menu, X
+} from "lucide-react";
+import Sidebar from "@/components/Sidebar";
 import { BusinessInfoForm } from "@/components/BusinessInfoForm";
 import { GenerationProgress } from "@/components/GenerationProgress";
 import { WebsitePreview } from "@/components/WebsitePreview";
 import { AuthForm } from "@/components/AuthForm";
 import { ProjectsList } from "@/components/ProjectsList";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/hooks/useTheme";
 import { supabase } from "@/integrations/supabase/client";
+import { Link } from "react-router-dom";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface ColorScheme {
   primary: string;
@@ -47,11 +56,20 @@ interface Project {
   deployment_url?: string;
 }
 
-type AppState = "auth" | "landing" | "form" | "generating" | "preview" | "projects";
+type AppState = "auth" | "dashboard" | "form" | "generating" | "preview" | "projects";
 
 const Index = () => {
   const { user, loading: authLoading, signOut, isLocalMode } = useAuth();
-  const [currentState, setCurrentState] = useState<AppState>(authLoading ? "auth" : user ? "landing" : "auth");
+  const [currentState, setCurrentState] = useState<AppState>(authLoading ? "auth" : user ? "dashboard" : "auth");
+  const { theme, setTheme } = useTheme();
+  const [recentProjects, setRecentProjects] = useState<Project[]>([]);
+  const [projectStats, setProjectStats] = useState({
+    total: 0,
+    completed: 0,
+    inProgress: 0,
+    failed: 0
+  });
+  const [isLoading, setIsLoading] = useState(true);
   const [businessInfo, setBusinessInfo] = useState<BusinessInfo | null>(null);
   const [generatedWebsite, setGeneratedWebsite] = useState({
     url: "https://acme-coffee-shop.netlify.app",
@@ -59,6 +77,52 @@ const Index = () => {
     description: "Professional website generated with AI"
   });
   const [isGenerating, setIsGenerating] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeSidebarItem, setActiveSidebarItem] = useState("dashboard");
+  
+  // Define fetchProjects with useCallback
+  const fetchProjects = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      // Fetch all projects for the user
+      const { data: projects, error } = await supabase
+        .from('website_projects')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Set recent projects (limit to 5)
+      setRecentProjects(projects?.slice(0, 5) || []);
+
+      // Calculate stats
+      if (projects) {
+        const total = projects.length;
+        const completed = projects.filter(p => p.status === 'completed').length;
+        const inProgress = projects.filter(p => p.status === 'in_progress').length;
+        const failed = projects.filter(p => p.status === 'failed').length;
+
+        setProjectStats({
+          total,
+          completed,
+          inProgress,
+          failed
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+  
+  // Fetch projects and stats when component mounts
+  useEffect(() => {
+    if (user) {
+      fetchProjects();
+    }
+  }, [user, fetchProjects]);
 
   const handleGetStarted = () => {
     setCurrentState("form");
@@ -102,17 +166,24 @@ const Index = () => {
           .from('website_projects')
           .update({ status: 'failed' })
           .eq('id', data.projectId);
-        throw error;
+        setIsGenerating(false);
+        setCurrentState("error");
+        return;
       }
 
-      // Set generated website data using the deployment URL from the response
-      setGeneratedWebsite({
-        url: response.deploymentUrl || `https://${data.businessName.toLowerCase().replace(/\s+/g, '-')}-${data.projectId.substring(0, 8)}.netlify.app`,
-        title: `${data.businessName} - Professional Website`,
-        description: `Professional website for ${data.businessName} generated with AI`
-      });
+      console.log('Website generation response:', response);
       
-      setCurrentState("preview");
+      // Check if we have a preview URL
+      if (response?.previewUrl) {
+        setGeneratedWebsite({
+          url: response.previewUrl,
+          title: `${data.businessName} - Generated Website`,
+          description: `Professional website for ${data.businessName}, a ${data.businessType} business`
+        });
+        setCurrentState("completed");
+      } else {
+        setCurrentState("error");
+      }
     } catch (error) {
       console.error('Error generating website:', error);
       alert('Failed to generate website. Please try again.');
@@ -127,12 +198,12 @@ const Index = () => {
   };
 
   const handleStartOver = () => {
-    setCurrentState("landing");
+    setCurrentState("dashboard");
     setBusinessInfo(null);
   };
 
   const handleAuthSuccess = () => {
-    setCurrentState("landing");
+    setCurrentState("dashboard");
   };
 
   const handleViewProjects = () => {
@@ -209,10 +280,10 @@ const Index = () => {
           <div className="text-center mb-8">
             <Button
               variant="ghost"
-              onClick={() => setCurrentState("landing")}
+              onClick={() => setCurrentState("dashboard")}
               className="mb-4 text-muted-foreground hover:text-foreground"
             >
-              ← Back to Home
+              ← Back to Dashboard
             </Button>
           </div>
           <BusinessInfoForm
@@ -267,6 +338,17 @@ const Index = () => {
               </Button>
             </div>
           </div>
+          {/* Direct preview link for testing */}
+          <div className="text-center mb-6">
+            <a
+              href="http://localhost:8080/preview?projectId=11227a52-16d2-4b42-a4fa-04586e72c749"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-primary hover:underline"
+            >
+              Open local preview: http://localhost:8080/preview?projectId=11227a52-16d2-4b42-a4fa-04586e72c749
+            </a>
+          </div>
           
           <WebsitePreview
             websiteData={generatedWebsite}
@@ -283,11 +365,11 @@ const Index = () => {
         <div className="container mx-auto px-4 py-8">
           <div className="text-center mb-8">
             <Button
-              onClick={() => setCurrentState("landing")}
+              onClick={() => setCurrentState("dashboard")}
               variant="ghost"
               className="mb-4 text-muted-foreground hover:text-foreground"
             >
-              ← Back to Home
+              ← Back to Dashboard
             </Button>
           </div>
           <ProjectsList
@@ -299,6 +381,9 @@ const Index = () => {
     );
   }
 
+
+  // Sidebar items and layout handled by Sidebar component
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -306,22 +391,34 @@ const Index = () => {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+              >
+                {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              </Button>
               <div className="p-2 rounded-lg bg-gradient-primary glow-primary">
-                <Sparkles className="w-5 h-5 text-white" />
+                <Hammer className="w-5 h-5 text-white" />
               </div>
-              <span className="text-xl font-bold gradient-text">WebGenAI</span>
+              <span className="text-xl font-bold gradient-text">Siteforge</span>
             </div>
             <div className="flex items-center gap-4">
               <Button
-                onClick={handleViewProjects}
                 variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-foreground"
+                size="icon"
+                onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+                title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
               >
-                <FolderOpen className="w-4 h-4 mr-2" />
-                My Projects
+                {theme === "light" ? (
+                  <Moon className="h-5 w-5" />
+                ) : (
+                  <Sun className="h-5 w-5" />
+                )}
+                <span className="sr-only">Toggle theme</span>
               </Button>
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-muted-foreground hidden md:inline">
                 Welcome, {user?.email}
               </span>
               <Button
@@ -336,188 +433,208 @@ const Index = () => {
           </div>
         </div>
       </header>
+      
+      {/* Main Layout with Sidebar */}
+      <div className="flex">
+        {/* Sidebar Component */}
+        <Sidebar 
+          isOpen={sidebarOpen} 
+          activeItem={activeSidebarItem} 
+          onItemClick={setActiveSidebarItem} 
+        />
 
-      {/* Hero Section */}
-      <section className="py-20 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-subtle opacity-50"></div>
-        <div className="container mx-auto px-4 text-center relative z-10">
-          <div className="max-w-4xl mx-auto">
-            <h1 className="text-5xl md:text-7xl font-bold gradient-hero-text mb-6 leading-tight">
-              AI-Powered Website Generator
-            </h1>
-            <p className="text-xl md:text-2xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Transform your business idea into a professional website in minutes. 
-              Just describe your business, and our AI does the rest.
-            </p>
-            
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-              <Button
-                onClick={handleGetStarted}
-                size="lg"
-                className="bg-gradient-primary hover:opacity-90 text-primary-foreground glow-primary h-12 px-8 text-lg transition-smooth"
-              >
-                <Sparkles className="w-5 h-5 mr-2" />
-                Generate My Website
-              </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                className="h-12 px-8 text-lg border-border/50 hover:bg-muted/50 transition-smooth"
-              >
-                View Demo
-              </Button>
-            </div>
-
-            {/* Quick Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-3xl mx-auto">
-              {stats.map((stat, index) => (
-                <div key={index} className="text-center">
-                  <div className="text-2xl font-bold text-primary mb-1">{stat.value}</div>
-                  <div className="text-sm text-muted-foreground">{stat.label}</div>
-                </div>
-              ))}
-            </div>
+        {/* Main Content */}
+        <main className={`flex-1 ${sidebarOpen ? 'md:ml-64' : 'md:ml-16'} transition-all duration-300 ease-in-out`}>
+          <div className="container px-4 py-8 mx-auto">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+          Welcome, {user?.email}
+            <p className="text-muted-foreground">Manage your website projects</p>
           </div>
+          <Button
+            onClick={handleGetStarted}
+            className="bg-gradient-primary hover:opacity-90 text-primary-foreground glow-primary transition-smooth"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            New Website
+          </Button>
         </div>
-      </section>
 
-      {/* Features Section */}
-      <section className="py-20 bg-gradient-subtle">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold gradient-text mb-4">
-              Everything You Need to Go Online
-            </h2>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Our AI-powered platform handles every aspect of creating your professional website
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {features.map((feature, index) => (
-              <div
-                key={index}
-                className="bg-gradient-card p-6 rounded-xl border border-border/50 backdrop-blur-sm hover:shadow-card transition-smooth"
-              >
-                <div className="p-3 bg-primary/10 rounded-lg w-fit mb-4">
-                  <feature.icon className="w-6 h-6 text-primary" />
-                </div>
-                <h3 className="text-xl font-semibold text-foreground mb-2">
-                  {feature.title}
-                </h3>
-                <p className="text-muted-foreground">
-                  {feature.description}
-                </p>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Projects</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center">
+                <BarChart3 className="w-5 h-5 text-primary mr-2" />
+                <div className="text-2xl font-bold">{projectStats.total}</div>
               </div>
-            ))}
-          </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Completed</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center">
+                <CheckCircle className="w-5 h-5 text-success mr-2" />
+                <div className="text-2xl font-bold">{projectStats.completed}</div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">In Progress</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center">
+                <Activity className="w-5 h-5 text-amber-500 mr-2" />
+                <div className="text-2xl font-bold">{projectStats.inProgress}</div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Failed</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center">
+                <Clock className="w-5 h-5 text-destructive mr-2" />
+                <div className="text-2xl font-bold">{projectStats.failed}</div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      </section>
 
-      {/* How It Works */}
-      <section className="py-20">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold gradient-text mb-4">
-              How It Works
-            </h2>
-            <p className="text-xl text-muted-foreground">
-              From idea to live website in three simple steps
-            </p>
-          </div>
-
-          <div className="max-w-4xl mx-auto">
-            <div className="grid md:grid-cols-3 gap-8">
-              {[
-                {
-                  step: "01",
-                  title: "Describe Your Business",
-                  description: "Tell us about your business, industry, and what makes you unique"
-                },
-                {
-                  step: "02",
-                  title: "AI Generates Your Site",
-                  description: "Our AI creates professional content, design, and code tailored for you"
-                },
-                {
-                  step: "03",
-                  title: "Launch & Customize",
-                  description: "Your website goes live instantly with options to customize and expand"
-                }
-              ].map((step, index) => (
-                <div key={index} className="text-center relative">
-                  <div className="bg-gradient-primary text-white rounded-full w-16 h-16 flex items-center justify-center text-xl font-bold mx-auto mb-4 shadow-glow">
-                    {step.step}
+        {/* Tabs for Recent Projects and Quick Actions */}
+        <Tabs defaultValue="recent" className="mb-8">
+          <TabsList>
+            <TabsTrigger value="recent">Recent Projects</TabsTrigger>
+            <TabsTrigger value="quick">Activity</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="recent" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent Projects</CardTitle>
+                <CardDescription>Your recently created website projects</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <div className="flex justify-center py-8">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
                   </div>
-                  <h3 className="text-xl font-semibold text-foreground mb-2">
-                    {step.title}
-                  </h3>
-                  <p className="text-muted-foreground">
-                    {step.description}
-                  </p>
-                  {index < 2 && (
-                    <div className="hidden md:block absolute top-8 left-full w-full">
-                      <ArrowRight className="w-6 h-6 text-primary/50 mx-auto" />
+                ) : recentProjects.length > 0 ? (
+                  <div className="space-y-4">
+                    {recentProjects.map((project) => (
+                      <div 
+                        key={project.id} 
+                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                        onClick={() => handleProjectSelect(project)}
+                      >
+                        <div>
+                          <h3 className="font-medium">{project.business_name}</h3>
+                          <p className="text-sm text-muted-foreground">{project.business_type} • {new Date(project.created_at).toLocaleDateString()}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className={`px-2 py-1 rounded-full text-xs ${project.status === 'completed' ? 'bg-success/20 text-success' : project.status === 'in_progress' ? 'bg-amber-500/20 text-amber-500' : project.status === 'failed' ? 'bg-destructive/20 text-destructive' : 'bg-muted text-muted-foreground'}`}>
+                            {project.status === 'in_progress' ? 'In Progress' : project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+                          </div>
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link to={`/projects/${project.id}`}>
+                              <ArrowRight className="w-4 h-4" />
+                            </Link>
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 border border-dashed rounded-lg">
+                    <FolderOpen className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium mb-2">No projects yet</h3>
+                    <p className="text-muted-foreground mb-4">Create your first website project to get started</p>
+                    <Button onClick={handleGetStarted}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create Project
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+              {recentProjects.length > 0 && (
+                <CardFooter className="border-t bg-muted/50 flex justify-between">
+                  <Button variant="ghost" size="sm" onClick={handleViewProjects}>
+                    View All Projects
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={fetchProjects}>
+                    <RefreshCcw className="w-4 h-4 mr-2" />
+                    Refresh
+                  </Button>
+                </CardFooter>
+              )}
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="quick" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent Activity</CardTitle>
+                <CardDescription>Your recent actions and updates</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-8">
+                  {recentProjects.slice(0, 3).map((project, index) => (
+                    <div key={index} className="flex">
+                      <div className="mr-4 flex flex-col items-center">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                          {project.status === 'completed' ? (
+                            <CheckCircle className="h-5 w-5 text-primary" />
+                          ) : project.status === 'in_progress' ? (
+                            <Activity className="h-5 w-5 text-primary" />
+                          ) : (
+                            <Clock className="h-5 w-5 text-primary" />
+                          )}
+                        </div>
+                        <div className="h-full w-px bg-border"></div>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium leading-none">
+                          {project.status === 'completed'
+                            ? 'Website completed'
+                            : project.status === 'in_progress'
+                            ? 'Website generation in progress'
+                            : 'Website creation started'}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {project.business_name} - {project.business_type}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(project.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {recentProjects.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No recent activity to display
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+        
+        {/* Activity moved into Activity tab above */}
           </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-20 bg-gradient-subtle">
-        <div className="container mx-auto px-4 text-center">
-          <div className="max-w-3xl mx-auto">
-            <h2 className="text-4xl font-bold gradient-hero-text mb-6">
-              Ready to Build Your Website?
-            </h2>
-            <p className="text-xl text-muted-foreground mb-8">
-              Join thousands of businesses who've already created their professional online presence with WebGenAI
-            </p>
-            
-            <div className="flex items-center justify-center gap-2 mb-8">
-              <CheckCircle className="w-5 h-5 text-success" />
-              <span className="text-muted-foreground">No coding required</span>
-              <span className="text-muted-foreground mx-2">•</span>
-              <CheckCircle className="w-5 h-5 text-success" />
-              <span className="text-muted-foreground">Live in minutes</span>
-              <span className="text-muted-foreground mx-2">•</span>
-              <CheckCircle className="w-5 h-5 text-success" />
-              <span className="text-muted-foreground">Professional results</span>
-            </div>
-
-            <Button
-              onClick={handleGetStarted}
-              size="lg"
-              className="bg-gradient-primary hover:opacity-90 text-primary-foreground glow-primary h-14 px-10 text-xl transition-smooth"
-            >
-              <Sparkles className="w-6 h-6 mr-2" />
-              Start Generating Now
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-border/50 py-12">
-        <div className="container mx-auto px-4">
-          <div className="flex flex-col md:flex-row items-center justify-between">
-            <div className="flex items-center gap-2 mb-4 md:mb-0">
-              <div className="p-2 rounded-lg bg-gradient-primary glow-primary">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-xl font-bold gradient-text">WebGenAI</span>
-            </div>
-            <div className="text-muted-foreground text-center md:text-right">
-              <p>&copy; 2024 WebGenAI. All rights reserved.</p>
-              <p className="text-sm mt-1">Powered by advanced AI technology</p>
-            </div>
-          </div>
-        </div>
-      </footer>
+        </main>
+      </div>
     </div>
   );
 };
