@@ -71,7 +71,13 @@ serve(async (req) => {
     await updateProgress(supabase, projectId, 'code_generation', 'in_progress', 60);
 
     // Generate HTML, CSS, and JS
-    const generatedCode = await generateWebsiteCode(pages, websiteStructure);
+    const generatedCode = await generateWebsiteCode(pages, websiteStructure, {
+      businessName,
+      businessType,
+      description,
+      targetAudience,
+      location
+    });
 
     await updateProgress(supabase, projectId, 'finalization', 'in_progress', 90);
 
@@ -134,23 +140,31 @@ async function updateProgress(supabase: any, projectId: string, stage: string, s
 
 async function generateWebsiteStructure(businessInfo: any) {
   const prompt = `
-Generate a website structure for a ${businessInfo.businessType} business called "${businessInfo.businessName}".
+You are creating a website structure for "${businessInfo.businessName}", a ${businessInfo.businessType} business.
 
-Business description: ${businessInfo.description}
-${businessInfo.targetAudience ? `Target audience: ${businessInfo.targetAudience}` : ''}
-${businessInfo.location ? `Location: ${businessInfo.location}` : ''}
+BUSINESS DETAILS:
+- Business Name: ${businessInfo.businessName}
+- Business Type: ${businessInfo.businessType}
+- Description: ${businessInfo.description}
+${businessInfo.targetAudience ? `- Target Audience: ${businessInfo.targetAudience}` : ''}
+${businessInfo.location ? `- Location: ${businessInfo.location}` : ''}
+
+Create a website structure that specifically reflects this ${businessInfo.businessType} business. The pages, navigation, and color scheme should be tailored to ${businessInfo.businessName} and appropriate for their target audience.
 
 Return a JSON object with this structure:
 {
   "pages": ["home", "about", "services", "contact"],
   "colorScheme": {
     "primary": "#hex",
-    "secondary": "#hex",
+    "secondary": "#hex", 
     "accent": "#hex"
   },
   "layout": "modern",
-  "navigation": ["Home", "About", "Services", "Contact"]
+  "navigation": ["Home", "About", "Services", "Contact"],
+  "businessFocus": "brief description of what makes this business unique"
 }
+
+Make sure the pages are relevant to a ${businessInfo.businessType} business and the colors match the industry.
   `;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -182,30 +196,39 @@ async function generateWebsitePages(structure: any, businessInfo: any) {
   
   for (const pageName of structure.pages) {
     const prompt = `
-Generate content for the ${pageName} page of ${businessInfo.businessName}, a ${businessInfo.businessType} business.
+Create compelling content for the ${pageName} page of "${businessInfo.businessName}".
 
-Business description: ${businessInfo.description}
-${businessInfo.targetAudience ? `Target audience: ${businessInfo.targetAudience}` : ''}
-${businessInfo.location ? `Location: ${businessInfo.location}` : ''}
+BUSINESS DETAILS:
+- Business Name: ${businessInfo.businessName}
+- Business Type: ${businessInfo.businessType}
+- Description: ${businessInfo.description}
+${businessInfo.targetAudience ? `- Target Audience: ${businessInfo.targetAudience}` : ''}
+${businessInfo.location ? `- Location: ${businessInfo.location}` : ''}
 
-Return a JSON object with:
+WEBSITE STRUCTURE: ${JSON.stringify(structure, null, 2)}
+
+Create content that specifically showcases ${businessInfo.businessName} as a ${businessInfo.businessType}. Use the business name throughout, mention the location if provided, and write for the target audience.
+
+For the ${pageName} page, return a JSON object with:
 {
-  "title": "Page Title",
+  "title": "${businessInfo.businessName} - [Page specific title]",
   "content": {
     "hero": {
-      "headline": "Main headline",
-      "subheadline": "Supporting text",
-      "cta": "Call to action text"
+      "headline": "Compelling headline featuring ${businessInfo.businessName}",
+      "subheadline": "Supporting text about ${businessInfo.businessType} services", 
+      "cta": "Call to action specific to ${businessInfo.businessType}"
     },
     "sections": [
       {
         "type": "text" | "features" | "testimonials" | "contact",
         "title": "Section title",
-        "content": "Section content or array of items"
+        "content": "Detailed content or array of items specific to ${businessInfo.businessName}"
       }
     ]
   }
 }
+
+Make sure all content is specifically tailored to ${businessInfo.businessName} and not generic.
     `;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -240,31 +263,43 @@ Return a JSON object with:
   return pages;
 }
 
-async function generateWebsiteCode(pages: any[], structure: any) {
+async function generateWebsiteCode(pages: any[], structure: any, businessInfo: any) {
   const prompt = `
-Generate a complete, modern, responsive website using the following structure and content:
+Generate a complete, professional website for "${businessInfo.businessName}".
 
-Structure: ${JSON.stringify(structure, null, 2)}
-Pages: ${JSON.stringify(pages, null, 2)}
+BUSINESS INFORMATION:
+- Business Name: ${businessInfo.businessName}
+- Business Type: ${businessInfo.businessType}
+- Description: ${businessInfo.description}
+${businessInfo.targetAudience ? `- Target Audience: ${businessInfo.targetAudience}` : ''}
+${businessInfo.location ? `- Location: ${businessInfo.location}` : ''}
+
+WEBSITE STRUCTURE: ${JSON.stringify(structure, null, 2)}
+PAGE CONTENT: ${JSON.stringify(pages, null, 2)}
+
+Create a modern, professional website that specifically represents ${businessInfo.businessName}. Use the exact business name, incorporate the business type, and ensure all content reflects their specific services/products.
 
 Requirements:
-- Modern, clean design with smooth animations
+- Use "${businessInfo.businessName}" as the main title and in meta tags
+- Include business type "${businessInfo.businessType}" in descriptions
+- Modern, clean design with smooth animations appropriate for ${businessInfo.businessType}
 - Fully responsive (mobile-first)
-- SEO optimized with proper meta tags
+- SEO optimized with proper meta tags including business name and type
 - Accessible (WCAG 2.1 AA compliant)
 - Fast loading with optimized code
-- Contact form with validation
-- Professional typography and spacing
+- Contact section with business location if provided
+- Professional typography and spacing suitable for ${businessInfo.businessType}
+- Color scheme from structure: ${JSON.stringify(structure.colorScheme)}
 
 Return a JSON object with:
 {
-  "html": "Complete HTML document with all pages",
-  "css": "Complete CSS with responsive design and animations",
+  "html": "Complete HTML document with all pages and ${businessInfo.businessName} branding",
+  "css": "Complete CSS with responsive design, animations, and brand colors",
   "js": "Complete JavaScript with form validation and interactivity",
-  "assets": ["list of image URLs from Unsplash API"]
+  "assets": ["list of image URLs from Unsplash that match ${businessInfo.businessType}"]
 }
 
-Use placeholder images from Unsplash that match the business type.
+Make sure the website clearly represents ${businessInfo.businessName} as a ${businessInfo.businessType} business.
   `;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
