@@ -2,6 +2,16 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 import { enrichLocationData } from './location-enricher.ts';
+import { 
+  getTemplate, 
+  generateHeroSection, 
+  generateFeaturesSection, 
+  generateServicesSection, 
+  generateTestimonialsSection, 
+  generateContactSection,
+  generateEnhancedCss,
+  type DesignTemplate
+} from './design-templates.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,6 +24,7 @@ interface ColorScheme {
   accent: string;
   background: string;
   text: string;
+  muted: string;
 }
 
 interface Typography {
@@ -614,125 +625,65 @@ async function fetchUnsplashImages(businessInfo: BusinessInfo): Promise<Unsplash
 
 async function generateEnhancedWebsite(
   businessInfo: BusinessInfo,
-  websiteContent: WebsiteContent,
+  content: WebsiteContent,
   images: UnsplashImage[]
 ): Promise<{ html: string; css: string; js: string }> {
-  const colorScheme = businessInfo.colorScheme || {
-    primary: '#0d6efd',
-    secondary: '#6c757d',
-    accent: '#ffc107',
-    background: '#ffffff',
-    text: '#212529'
-  };
-
-  const typography = businessInfo.typography || {
-    headings: 'Roboto',
-    body: 'Open Sans'
-  };
-
-  const heroImage = images[0]?.url || 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=1200&h=600&fit=crop';
+  const logPrefix = `[generate-website:${businessInfo.projectId}]`;
+  console.log(`${logPrefix} Generating enhanced HTML/CSS/JS with modern design templates...`);
   
+  // Get the design template
+  const template = getTemplate(businessInfo.websiteTemplate);
+  
+  const colorScheme = businessInfo.colorScheme || {
+    ...template.colorScheme,
+    muted: template.colorScheme.muted
+  };
+  const typography = businessInfo.typography || template.typography;
+
+  const primaryImage = images[0] || null;
+  const heroImage = primaryImage ? primaryImage.url : 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=1200&h=600&fit=crop';
+
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${businessInfo.businessName} - Professional ${businessInfo.businessType}</title>
+    <title>${businessInfo.businessName} - ${businessInfo.businessType}</title>
+    <meta name="description" content="${businessInfo.description}">
+    
+    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=${typography.headings.replace(' ', '+')}:wght@300;400;600;700&family=${typography.body.replace(' ', '+')}:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=${typography.headings.replace(' ', '+')}:wght@300;400;600;700&family=${typography.body.replace(' ', '+')}:wght@300;400;500&display=swap" rel="stylesheet">
+    
     <style>
-        :root {
-            --primary-color: ${colorScheme.primary};
-            --secondary-color: ${colorScheme.secondary};
-            --accent-color: ${colorScheme.accent};
-            --background-color: ${colorScheme.background};
-            --text-color: ${colorScheme.text};
-        }
-        
-        body {
-            font-family: '${typography.body}', sans-serif;
-            line-height: 1.6;
-            color: var(--text-color);
-            background-color: var(--background-color);
-        }
-        
-        h1, h2, h3, h4, h5, h6 {
-            font-family: '${typography.headings}', sans-serif;
-            font-weight: 600;
-        }
-        
-        .hero-section {
-            background: linear-gradient(135deg, rgba(13, 110, 253, 0.9), rgba(13, 110, 253, 0.7)), url('${heroImage}');
-            background-size: cover;
-            background-position: center;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            color: white;
-            position: relative;
-        }
-        
-        .hero-content {
-            z-index: 2;
-        }
-        
-        .btn-primary {
-            background-color: var(--primary-color);
-            border-color: var(--primary-color);
-            padding: 12px 30px;
-            font-weight: 500;
-            border-radius: 8px;
-            transition: all 0.3s ease;
-        }
-        
-        .btn-primary:hover {
-            background-color: var(--accent-color);
-            border-color: var(--accent-color);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
-        }
-        
-        .feature-card {
-            background: white;
-            border-radius: 15px;
-            padding: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            transition: all 0.3s ease;
-            height: 100%;
-        }
-        
-        .feature-card:hover {
-            transform: translateY(-10px);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
-        }
-        
-        .feature-icon {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 20px;
-            color: white;
-            font-size: 2rem;
-        }
-        
-        .navbar {
-            background: rgba(255, 255, 255, 0.95) !important;
-            backdrop-filter: blur(10px);
-            transition: all 0.3s ease;
-            padding: 15px 0;
-        }
-        
-        .navbar.scrolled {
-            background: rgba(255, 255, 255, 0.98) !important;
-            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
-        }
-        
-        .navbar-brand {
+        ${generateEnhancedCss(colorScheme, typography, template)}
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg fixed-top">
+        <div class="container">
+            <a class="navbar-brand" href="#">${businessInfo.businessName}</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    ${content.pages.map(page => `
+                        <li class="nav-item">
+                            <a class="nav-link" href="#${page.name}">${page.title}</a>
+                        </li>
+                    `).join('')}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main>
             font-family: '${typography.headings}', sans-serif;
             font-weight: 700;
             font-size: 1.5rem;
@@ -818,7 +769,7 @@ async function generateEnhancedWebsite(
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                    ${websiteContent.pages.map(page => {
+                    ${content.pages.map(page => {
                         const pageName = page.name === 'home' ? 'Home' : 
                                        page.name === 'about' ? 'About' :
                                        page.name === 'services' ? 'Services' :
@@ -1001,6 +952,9 @@ async function generateEnhancedWebsite(
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+        
         // Navbar scroll effect
         window.addEventListener('scroll', function() {
             const navbar = document.querySelector('.navbar');
@@ -1026,23 +980,26 @@ async function generateEnhancedWebsite(
         });
 
         // Contact form
-        document.querySelector('.contact-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            // Show success message
-            const alert = document.createElement('div');
-            alert.className = 'alert alert-success mt-3';
-            alert.innerHTML = '<i class="fas fa-check-circle me-2"></i>Thank you! Your message has been sent successfully. We will get back to you soon.';
-            this.appendChild(alert);
-            
-            // Reset form
-            this.reset();
-            
-            // Remove alert after 5 seconds
-            setTimeout(() => {
-                alert.remove();
-            }, 5000);
-        });
+        const contactForm = document.querySelector('.contact-form');
+        if (contactForm) {
+            contactForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // Show success message
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-success mt-3';
+                alert.innerHTML = 'Thank you! Your message has been sent successfully. We will get back to you soon.';
+                this.appendChild(alert);
+                
+                // Reset form
+                this.reset();
+                
+                // Remove alert after 5 seconds
+                setTimeout(() => {
+                    alert.remove();
+                }, 5000);
+            });
+        }
     </script>
 </body>
 </html>`;
@@ -2003,25 +1960,30 @@ async function generatePageHTML(businessInfo: BusinessInfo, page: WebsitePage, w
     <main>
         ${generatePageContent(page, businessInfo, websiteContent)}
     </main>
-    
+
     <!-- Footer -->
-    <footer class="footer">
+    <footer class="bg-dark text-white text-center py-4">
         <div class="container">
             <div class="row">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <h5>${businessInfo.businessName}</h5>
-                    <p>${businessInfo.description}</p>
+                    <p>${websiteContent.brandMessage}</p>
                 </div>
-                <div class="col-md-6">
-                    <h5>Contact Info</h5>
-                    <p><i class="fas fa-map-marker-alt"></i> ${businessInfo.location}</p>
-                    <p><i class="fas fa-envelope"></i> info@${businessInfo.businessName.toLowerCase().replace(/\s+/g, '')}.com</p>
+                <div class="col-md-4">
+                    <h5>Services</h5>
+                    <ul class="list-unstyled">
+                        ${(businessInfo.services || []).slice(0, 3).map((service: any) => `
+                            <li>${service.name || service}</li>
+                        `).join('')}
+                    </ul>
+                </div>
+                <div class="col-md-4">
+                    <h5>Contact</h5>
+                    <p>${businessInfo.location || 'Contact us for more information'}</p>
                 </div>
             </div>
-            <hr>
-            <div class="text-center">
-                <p>&copy; 2024 ${businessInfo.businessName}. All rights reserved.</p>
-            </div>
+            <hr class="my-3">
+            <p class="mb-0">&copy; 2024 ${businessInfo.businessName}. All rights reserved.</p>
         </div>
     </footer>
     

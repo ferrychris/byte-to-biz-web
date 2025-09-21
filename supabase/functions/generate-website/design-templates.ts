@@ -392,3 +392,145 @@ export function generateContactSection(
       </div>
     </section>`;
 }
+
+// Generate enhanced CSS with design template
+export function generateEnhancedCss(
+  colorScheme: { primary: string; secondary: string; accent: string; background: string; text: string; muted: string },
+  typography: { headings: string; body: string },
+  template: DesignTemplate
+): string {
+  return `
+/* Enhanced CSS with Design Template */
+:root {
+  --primary-color: ${colorScheme.primary};
+  --secondary-color: ${colorScheme.secondary};
+  --accent-color: ${colorScheme.accent};
+  --background-color: ${colorScheme.background};
+  --text-color: ${colorScheme.text};
+  --muted-color: ${colorScheme.muted};
+}
+
+body {
+  font-family: '${typography.body}', sans-serif;
+  line-height: 1.6;
+  color: var(--text-color);
+  background-color: var(--background-color);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: '${typography.headings}', sans-serif;
+  font-weight: 600;
+}
+
+.navbar {
+  background: transparent !important;
+  transition: all 0.3s ease;
+  padding: 15px 0;
+}
+
+.navbar.scrolled {
+  background: rgba(255, 255, 255, 0.98) !important;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+}
+
+.navbar-brand {
+  font-family: '${typography.headings}', sans-serif;
+  font-weight: 700;
+  font-size: 1.5rem;
+  color: var(--text-color) !important;
+}
+
+.nav-link {
+  font-weight: 500;
+  color: var(--text-color) !important;
+  transition: color 0.3s ease;
+}
+
+.nav-link:hover {
+  color: var(--primary-color) !important;
+}
+
+.btn-primary {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  font-weight: 600;
+  padding: 12px 30px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+
+.card {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+}
+
+footer {
+  background: var(--text-color);
+  color: var(--background-color);
+  padding: 3rem 0 2rem;
+}
+
+.text-primary {
+  color: var(--primary-color) !important;
+}
+
+.bg-primary {
+  background-color: var(--primary-color) !important;
+}
+
+/* Lucide Icons Styling */
+[data-lucide] {
+  stroke-width: 2;
+}
+
+/* Section Spacing */
+.section {
+  padding: 80px 0;
+}
+
+.section.bg-light {
+  background-color: #f8fafc !important;
+}
+
+/* Animation Classes */
+.fade-in {
+  animation: fadeIn 0.6s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .hero-section h1 {
+    font-size: 2.5rem !important;
+  }
+  
+  .section {
+    padding: 60px 0;
+  }
+  
+  .features-grid,
+  .services-grid,
+  .testimonials-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+  `;
+}

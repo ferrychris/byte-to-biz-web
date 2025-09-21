@@ -10,6 +10,7 @@ import LandingPage from "./pages/LandingPage";
 import NotFound from "./pages/NotFound";
 import ProjectsPage from "./pages/ProjectsPage";
 import PreviewWebsite from "./pages/PreviewWebsite";
+import Login from "./pages/Login";
 import { ProjectDetailsRoute } from "./routes/ProjectDetailsRoute";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/dashboard" element={<Index />} />
+              <Route path="/login" element={<Login />} />
               <Route path="/preview" element={<PreviewWebsite />} />
             <Route path="/project" element={<ProjectsPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
