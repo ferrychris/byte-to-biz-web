@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Zap, Globe, Rocket, ArrowRight, CheckCircle, LogOut } from "lucide-react";
+import { Sparkles, Zap, Globe, Rocket, ArrowRight, CheckCircle, LogOut, FolderOpen } from "lucide-react";
 import { BusinessInfoForm } from "@/components/BusinessInfoForm";
 import { GenerationProgress } from "@/components/GenerationProgress";
 import { WebsitePreview } from "@/components/WebsitePreview";
 import { AuthForm } from "@/components/AuthForm";
+import { ProjectsList } from "@/components/ProjectsList";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -17,7 +18,19 @@ interface BusinessInfo {
   projectId: string;
 }
 
-type AppState = "auth" | "landing" | "form" | "generating" | "preview";
+interface Project {
+  id: string;
+  business_name: string;
+  business_type: string;
+  description: string;
+  location: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  created_at: string;
+  updated_at: string;
+  deployment_url?: string;
+}
+
+type AppState = "auth" | "landing" | "form" | "generating" | "preview" | "projects";
 
 const Index = () => {
   const { user, loading: authLoading, signOut, isLocalMode } = useAuth();
@@ -40,6 +53,17 @@ const Index = () => {
     setIsGenerating(true);
     
     try {
+      // Update project status to in_progress
+      const { error: updateError } = await supabase
+        .from('website_projects')
+        .update({ status: 'in_progress' })
+        .eq('id', data.projectId);
+      
+      if (updateError) {
+        console.error('Error updating project status:', updateError);
+      }
+
+      // Call the generate-website edge function
       const { data: response, error } = await supabase.functions.invoke('generate-website', {
         body: {
           projectId: data.projectId,
@@ -51,17 +75,29 @@ const Index = () => {
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error generating website:', error);
+        // Update project status to failed
+        await supabase
+          .from('website_projects')
+          .update({ status: 'failed' })
+          .eq('id', data.projectId);
+        throw error;
+      }
 
+      // Set generated website data using the deployment URL from the response
       setGeneratedWebsite({
-        url: "https://generated-website.netlify.app",
+        url: response.deploymentUrl || `https://${data.businessName.toLowerCase().replace(/\s+/g, '-')}-${data.projectId.substring(0, 8)}.netlify.app`,
         title: `${data.businessName} - Professional Website`,
-        description: "Generated with AI"
+        description: `Professional website for ${data.businessName} generated with AI`,
+        projectId: data.projectId
       });
       
       setCurrentState("preview");
     } catch (error) {
       console.error('Error generating website:', error);
+      alert('Failed to generate website. Please try again.');
+      setCurrentState("form");
     } finally {
       setIsGenerating(false);
     }
@@ -78,6 +114,29 @@ const Index = () => {
 
   const handleAuthSuccess = () => {
     setCurrentState("landing");
+  };
+
+  const handleViewProjects = () => {
+    setCurrentState("projects");
+  };
+
+  const handleProjectSelect = (project: Project) => {
+    // Handle project selection - could show project details or regenerate
+    console.log('Selected project:', project);
+    // For now, let's go to the form with the project data
+    setBusinessInfo({
+      businessName: project.business_name,
+      businessType: project.business_type,
+      description: project.description,
+      location: project.location,
+      contactEmail: '', // We don't store this in the project
+      projectId: project.id
+    });
+    setCurrentState("form");
+  };
+
+  const handleCreateNewProject = () => {
+    setCurrentState("form");
   };
 
   // Show loading while checking auth
@@ -179,12 +238,42 @@ const Index = () => {
               >
                 Generate Another Website
               </Button>
+              <Button
+                onClick={handleViewProjects}
+                variant="outline"
+                className="border-border/50"
+              >
+                <FolderOpen className="w-4 h-4 mr-2" />
+                View All Projects
+              </Button>
             </div>
           </div>
           
           <WebsitePreview
             websiteData={generatedWebsite}
             isVisible={true}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (currentState === "projects") {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center mb-8">
+            <Button
+              onClick={() => setCurrentState("landing")}
+              variant="ghost"
+              className="mb-4 text-muted-foreground hover:text-foreground"
+            >
+              ← Back to Home
+            </Button>
+          </div>
+          <ProjectsList
+            onProjectSelect={handleProjectSelect}
+            onCreateNew={handleCreateNewProject}
           />
         </div>
       </div>
@@ -204,6 +293,15 @@ const Index = () => {
               <span className="text-xl font-bold gradient-text">WebGenAI</span>
             </div>
             <div className="flex items-center gap-4">
+              <Button
+                onClick={handleViewProjects}
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <FolderOpen className="w-4 h-4 mr-2" />
+                My Projects
+              </Button>
               <span className="text-sm text-muted-foreground">
                 Welcome, {user?.email}
               </span>

@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Monitor, Smartphone, Tablet, ExternalLink, Download, Copy, Check } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface WebsitePreviewProps {
   websiteData?: {
     url: string;
     title: string;
     description: string;
+    projectId?: string;
   };
   isVisible: boolean;
 }
@@ -18,6 +20,72 @@ type ViewportType = "desktop" | "tablet" | "mobile";
 export const WebsitePreview = ({ websiteData, isVisible }: WebsitePreviewProps) => {
   const [viewport, setViewport] = useState<ViewportType>("desktop");
   const [isCopied, setIsCopied] = useState(false);
+  const [websiteContent, setWebsiteContent] = useState<{
+    html: string;
+    css: string;
+    js: string;
+  } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchWebsiteContent = async () => {
+      if (!websiteData?.projectId) return;
+      
+      setIsLoading(true);
+      try {
+        // Fetch the generated website content from the database
+        const { data, error } = await supabase
+          .from('website_generated_data')
+          .select('html_content, css_content, js_content')
+          .eq('project_id', websiteData.projectId)
+          .single();
+
+        if (error) {
+          console.error('Error fetching website content:', error);
+          return;
+        }
+
+        if (data) {
+          setWebsiteContent({
+            html: data.html_content,
+            css: data.css_content,
+            js: data.js_content
+          });
+        }
+      } catch (error) {
+        console.error('Error:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchWebsiteContent();
+  }, [websiteData?.projectId]);
+
+  // Combine HTML, CSS, and JS into a complete website
+  const getFullWebsiteContent = () => {
+    if (!websiteContent) return mockWebsiteContent;
+
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${websiteData?.title || 'Generated Website'}</title>
+          <style>
+            ${websiteContent.css}
+          </style>
+      </head>
+      <body>
+          ${websiteContent.html}
+          <script>
+            ${websiteContent.js}
+          </script>
+      </body>
+      </html>
+    `;
+  };
 
   const getViewportDimensions = () => {
     switch (viewport) {
@@ -30,22 +98,30 @@ export const WebsitePreview = ({ websiteData, isVisible }: WebsitePreviewProps) 
     }
   };
 
+  // Get the internal preview URL
+  const getInternalPreviewUrl = () => {
+    if (!websiteData?.projectId) return '';
+    const baseUrl = `${window.location.protocol}//${window.location.host}`;
+    return `${baseUrl}/api/preview-website?projectId=${websiteData.projectId}`;
+  };
+
   const handleCopyUrl = async () => {
-    if (websiteData?.url) {
-      await navigator.clipboard.writeText(websiteData.url);
+    const url = getInternalPreviewUrl() || websiteData?.url;
+    if (url) {
+      await navigator.clipboard.writeText(url);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
     }
   };
 
-  // Mock website content for demo
+  // Mock website content for demo (fallback)
   const mockWebsiteContent = `
     <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Acme Coffee Shop - Premium Coffee Experience</title>
+        <title>${websiteData?.title || 'Generated Website'}</title>
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; }
@@ -62,38 +138,38 @@ export const WebsitePreview = ({ websiteData, isVisible }: WebsitePreviewProps) 
     </head>
     <body>
         <div class="hero">
-            <h1>Welcome to Acme Coffee Shop</h1>
-            <p>Premium coffee experience in the heart of New York</p>
+            <h1>Welcome to ${websiteData?.title?.split(' - ')[0] || 'Our Business'}</h1>
+            <p>${websiteData?.description || 'Professional website generated with AI'}</p>
         </div>
         
         <div class="section">
             <h2 style="text-align: center; margin-bottom: 3rem; font-size: 2.5rem;">Our Services</h2>
             <div class="grid">
                 <div class="card">
-                    <h3 style="margin-bottom: 1rem;">Artisan Coffee</h3>
-                    <p>Hand-crafted beverages made from the finest beans sourced globally.</p>
+                    <h3 style="margin-bottom: 1rem;">Quality Service</h3>
+                    <p>We provide top-notch services tailored to your needs.</p>
                 </div>
                 <div class="card">
-                    <h3 style="margin-bottom: 1rem;">Fresh Pastries</h3>
-                    <p>Daily-baked goods that perfectly complement our coffee selection.</p>
+                    <h3 style="margin-bottom: 1rem;">Professional Team</h3>
+                    <p>Our experienced team is dedicated to delivering excellence.</p>
                 </div>
                 <div class="card">
-                    <h3 style="margin-bottom: 1rem;">Cozy Atmosphere</h3>
-                    <p>Perfect space for work, meetings, or relaxing with friends.</p>
+                    <h3 style="margin-bottom: 1rem;">Customer Satisfaction</h3>
+                    <p>Your satisfaction is our priority in everything we do.</p>
                 </div>
             </div>
         </div>
         
         <div class="section" style="background: #F9FAFB;">
-            <h2 style="text-align: center; margin-bottom: 2rem;">Visit Us Today</h2>
+            <h2 style="text-align: center; margin-bottom: 2rem;">Contact Us</h2>
             <div style="text-align: center;">
-                <p style="margin-bottom: 2rem;">123 Coffee Street, New York, NY 10001</p>
-                <button class="btn">Get Directions</button>
+                <p style="margin-bottom: 2rem;">Get in touch to learn more about our services</p>
+                <button class="btn">Contact Now</button>
             </div>
         </div>
         
         <footer>
-            <p>&copy; 2024 Acme Coffee Shop. All rights reserved.</p>
+            <p>&copy; ${new Date().getFullYear()} ${websiteData?.title?.split(' - ')[0] || 'Our Business'}. All rights reserved.</p>
         </footer>
     </body>
     </html>
@@ -115,9 +191,15 @@ export const WebsitePreview = ({ websiteData, isVisible }: WebsitePreviewProps) 
           </div>
           
           <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="bg-success/10 text-success border-success/20">
-              Live Preview
-            </Badge>
+            {isLoading ? (
+              <Badge variant="secondary" className="bg-warning/10 text-warning border-warning/20">
+                Loading Preview
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="bg-success/10 text-success border-success/20">
+                Live Preview
+              </Badge>
+            )}
           </div>
         </div>
 
@@ -165,7 +247,7 @@ export const WebsitePreview = ({ websiteData, isVisible }: WebsitePreviewProps) 
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => window.open(websiteData.url, "_blank")}
+                  onClick={() => window.open(getInternalPreviewUrl() || websiteData?.url, "_blank")}
                   className="h-8 px-3 border-border/50"
                 >
                   <ExternalLink className="w-4 h-4" />
@@ -199,7 +281,7 @@ export const WebsitePreview = ({ websiteData, isVisible }: WebsitePreviewProps) 
             }}
           >
             <iframe
-              srcDoc={mockWebsiteContent}
+              srcDoc={getFullWebsiteContent()}
               className="w-full h-full border-0"
               title="Website Preview"
               sandbox="allow-scripts allow-same-origin"
@@ -216,7 +298,7 @@ export const WebsitePreview = ({ websiteData, isVisible }: WebsitePreviewProps) 
                   <div className="w-2 h-2 rounded-full bg-success/60"></div>
                 </div>
                 <span className="font-mono">
-                  {websiteData?.url || "https://acme-coffee-shop.netlify.app"}
+                  {getInternalPreviewUrl() || websiteData?.url || "https://acme-coffee-shop.netlify.app"}
                 </span>
               </div>
             </div>
@@ -234,7 +316,7 @@ export const WebsitePreview = ({ websiteData, isVisible }: WebsitePreviewProps) 
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">URL:</span>
-                <span className="text-primary font-mono">{websiteData.url}</span>
+                <span className="text-primary font-mono">{getInternalPreviewUrl() || websiteData?.url}</span>
               </div>
             </div>
           </div>
